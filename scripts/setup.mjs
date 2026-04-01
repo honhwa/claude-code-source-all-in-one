@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Claude Code Source - Setup script
+ * Start Claude Code - One-click setup script
  *
+ * This script handles everything needed to run Claude Code from leaked source:
  * 1. Check/install Bun runtime
  * 2. Install npm dependencies
  * 3. Create stub modules for Anthropic private packages
@@ -10,13 +11,12 @@
  */
 
 import { execSync, spawnSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, chmodSync, cpSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, chmodSync, cpSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-// Source files are in the src/ subdirectory
 const SRC = join(ROOT, 'src');
 
 const log = (msg) => console.log(`\x1b[36m[setup]\x1b[0m ${msg}`);
@@ -24,22 +24,20 @@ const ok = (msg) => console.log(`\x1b[32m  ✓\x1b[0m ${msg}`);
 const warn = (msg) => console.log(`\x1b[33m  !\x1b[0m ${msg}`);
 const err = (msg) => console.error(`\x1b[31m  ✗\x1b[0m ${msg}`);
 
-const isWindows = process.platform === 'win32';
-
 // ─── Step 1: Check Bun ───────────────────────────────────────────────
 log('Checking Bun runtime...');
 
+const bunPath = join(process.env.HOME, '.bun', 'bin', 'bun');
 let hasBun = false;
 try {
-  const result = spawnSync('bun', ['--version'], { encoding: 'utf8', shell: true });
+  const result = spawnSync('bun', ['--version'], { encoding: 'utf8' });
   if (result.status === 0) {
     ok(`Bun ${result.stdout.trim()} found`);
     hasBun = true;
   }
 } catch {}
 
-if (!hasBun && !isWindows) {
-  const bunPath = join(process.env.HOME || '', '.bun', 'bin', 'bun');
+if (!hasBun) {
   try {
     const result = spawnSync(bunPath, ['--version'], { encoding: 'utf8' });
     if (result.status === 0) {
@@ -52,11 +50,7 @@ if (!hasBun && !isWindows) {
 if (!hasBun) {
   log('Installing Bun...');
   try {
-    if (isWindows) {
-      execSync('powershell -c "irm bun.sh/install.ps1 | iex"', { stdio: 'inherit' });
-    } else {
-      execSync('curl -fsSL https://bun.sh/install | bash', { stdio: 'inherit' });
-    }
+    execSync('curl -fsSL https://bun.sh/install | bash', { stdio: 'inherit' });
     ok('Bun installed');
   } catch {
     err('Failed to install Bun. Please install manually: https://bun.sh');
@@ -66,26 +60,16 @@ if (!hasBun) {
 
 // Find bun binary
 const BUN = (() => {
-  try { execSync('bun --version', { stdio: 'pipe', shell: true }); return 'bun'; } catch {}
-  // Check common install locations
-  const homeDir = process.env.USERPROFILE || process.env.HOME || '';
-  const candidates = isWindows
-    ? [join(homeDir, '.bun', 'bin', 'bun.exe')]
-    : [join(homeDir, '.bun', 'bin', 'bun')];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      ok(`Found bun at ${p}`);
-      return `"${p}"`;
-    }
-  }
-  err('Cannot find bun binary. Please restart your terminal after installation.');
+  try { execSync('bun --version', { stdio: 'pipe' }); return 'bun'; } catch {}
+  if (existsSync(bunPath)) return bunPath;
+  err('Cannot find bun binary');
   process.exit(1);
 })();
 
 // ─── Step 2: Install dependencies ────────────────────────────────────
 log('Installing dependencies...');
 try {
-  execSync(`${BUN} install`, { cwd: ROOT, stdio: 'inherit', shell: true });
+  execSync(`${BUN} install`, { cwd: ROOT, stdio: 'inherit' });
   ok('Dependencies installed');
 } catch (e) {
   err('Failed to install dependencies');
@@ -143,27 +127,15 @@ export const DEFAULT_GRANT_FLAGS = {};
 export default {};
 `,
 
-  '@ant/computer-use-mcp/types': `
-export const DEFAULT_GRANT_FLAGS = {};
-export default {};
-`,
-
-  '@ant/computer-use-mcp/sentinelApps': `
-export const getSentinelCategory = () => undefined;
-export default {};
-`,
-
   '@ant/computer-use-swift': 'export default {};',
-
-  '@ant/computer-use-input': `
-export default {};
-`,
 
   '@ant/claude-for-chrome-mcp': `
 export const BROWSER_TOOLS = [];
 export const createClaudeForChromeMcpServer = () => ({});
 export default {};
 `,
+
+  // NOTE: @alcalzone/ansi-tokenize is installed via npm (required for Ink rendering)
 
   'color-diff-napi': `
 export const ColorDiff = {};
@@ -180,11 +152,8 @@ export default {};
 
 for (const [pkg, content] of Object.entries(stubs)) {
   const dir = join(ROOT, 'node_modules', pkg);
-  if (existsSync(join(dir, 'package.json'))) {
-    try {
-      const pkgJson = readFileSync(join(dir, 'package.json'), 'utf8');
-      if (!pkgJson.includes('stub')) continue; // Real package exists, skip
-    } catch {}
+  if (existsSync(join(dir, 'package.json')) && !readFileSync(join(dir, 'package.json'), 'utf8').includes('stub')) {
+    continue; // Real package exists, skip
   }
   mkdirSync(dir, { recursive: true });
   const isCommonJS = content.startsWith('module.exports');
@@ -201,7 +170,8 @@ log('Creating missing source files (generated/feature-gated)...');
 
 const missingFiles = {
   // Generated types (normally created by build scripts)
-  'entrypoints/sdk/coreTypes.generated.ts': (() => {
+  'src/entrypoints/sdk/coreTypes.generated.ts': (() => {
+    // Read coreSchemas to generate type stubs
     const schemasPath = join(SRC, 'entrypoints/sdk/coreSchemas.ts');
     if (!existsSync(schemasPath)) return '// stub\nexport default {};\n';
     const content = readFileSync(schemasPath, 'utf8');
@@ -211,28 +181,24 @@ const missingFiles = {
     return schemas.map(s => `export type ${s.replace(/Schema$/, '')} = any;`).join('\n') + '\n';
   })(),
 
-  'entrypoints/sdk/settingsTypes.generated.ts':
+  'src/entrypoints/sdk/settingsTypes.generated.ts':
     'export type Settings = Record<string, unknown>;\n',
 
-  'entrypoints/sdk/runtimeTypes.ts': (() => {
-    const p = join(SRC, 'entrypoints/sdk/runtimeTypes.ts');
-    return existsSync(p) ? null : 'export default {};\n';
-  })(),
+  'src/entrypoints/sdk/runtimeTypes.ts':
+    'export default {};\n',
 
-  'entrypoints/sdk/toolTypes.ts': (() => {
-    const p = join(SRC, 'entrypoints/sdk/toolTypes.ts');
-    return existsSync(p) ? null : 'export default {};\n';
-  })(),
+  'src/entrypoints/sdk/toolTypes.ts':
+    'export default {};\n',
 
   // Feature-gated files (removed at compile time, not in source map)
-  'types/connectorText.ts': `
+  'src/types/connectorText.ts': `
 export type ConnectorTextBlock = { type: 'connector_text'; text: string };
 export type ConnectorTextDelta = { type: 'connector_text_delta'; text: string };
 export function isConnectorTextBlock(_block: unknown): _block is ConnectorTextBlock { return false; }
 export function connectorTextBlockCount(_blocks: unknown[]): number { return 0; }
 `,
 
-  'utils/filePersistence/types.ts': `
+  'src/utils/filePersistence/types.ts': `
 export const DEFAULT_UPLOAD_CONCURRENCY = 5;
 export const FILE_COUNT_LIMIT = 100;
 export const OUTPUTS_SUBDIR = 'outputs';
@@ -242,29 +208,28 @@ export type TurnStartTime = number;
 export default {};
 `,
 
-  'tools/TungstenTool/TungstenTool.ts':
+  'src/tools/TungstenTool/TungstenTool.ts':
     "export const TungstenTool: any = { name: 'Tungsten' };\nexport default {};\n",
 
-  'tools/TungstenTool/TungstenLiveMonitor.ts':
+  'src/tools/WorkflowTool/constants.ts':
     'export default {};\n',
 
-  'tools/WorkflowTool/constants.ts':
+  'src/tools/TungstenTool/TungstenLiveMonitor.ts':
     'export default {};\n',
 
-  'utils/ultraplan/prompt.txt.ts':
+  'src/utils/ultraplan/prompt.txt.ts':
     'export default {};\n',
 
-  'ink/global.d.ts':
+  'src/ink/global.d.ts':
     'export default {};\n',
 
-  'skills/bundled/verify/examples/cli.md': '',
-  'skills/bundled/verify/examples/server.md': '',
-  'skills/bundled/verify/SKILL.md': '',
+  'src/skills/bundled/verify/examples/cli.md': '',
+  'src/skills/bundled/verify/examples/server.md': '',
+  'src/skills/bundled/verify/SKILL.md': '',
 };
 
 for (const [file, content] of Object.entries(missingFiles)) {
-  if (content === null) continue; // file already exists
-  const fullPath = join(SRC, file);
+  const fullPath = join(ROOT, file);
   if (!existsSync(fullPath)) {
     mkdirSync(dirname(fullPath), { recursive: true });
     writeFileSync(fullPath, content.trim() ? content.trim() + '\n' : '');
@@ -280,32 +245,30 @@ if (!existsSync(rgVendorDir)) {
   try {
     const tmpDir = join(ROOT, '.tmp-rg-setup');
     mkdirSync(tmpDir, { recursive: true });
-    execSync(`npm pack @anthropic-ai/claude-code --pack-destination "${tmpDir}"`, {
-      cwd: tmpDir, stdio: 'pipe', shell: true
+    execSync(`npm pack @anthropic-ai/claude-code --pack-destination ${tmpDir}`, {
+      cwd: tmpDir, stdio: 'pipe'
     });
+    const tgz = execSync(`ls ${tmpDir}/anthropic-ai-claude-code-*.tgz`, { encoding: 'utf8' }).trim();
+    execSync(`tar -xzf ${tgz} -C ${tmpDir}`, { stdio: 'pipe' });
 
-    // Find the tgz file
-    const { readdirSync } = await import('fs');
-    const tgzFile = readdirSync(tmpDir).find(f => f.startsWith('anthropic-ai-claude-code') && f.endsWith('.tgz'));
-    if (tgzFile) {
-      execSync(`tar -xzf "${join(tmpDir, tgzFile)}" -C "${tmpDir}"`, { stdio: 'pipe', shell: true });
-      const srcRg = join(tmpDir, 'package', 'vendor', 'ripgrep');
-      if (existsSync(srcRg)) {
-        mkdirSync(dirname(rgVendorDir), { recursive: true });
-        cpSync(srcRg, rgVendorDir, { recursive: true });
-        // Make executables on non-Windows
-        if (!isWindows) {
-          for (const platform of ['arm64-darwin', 'x64-darwin', 'arm64-linux', 'x64-linux']) {
-            const rgBin = join(rgVendorDir, platform, 'rg');
-            if (existsSync(rgBin)) chmodSync(rgBin, 0o755);
-          }
-        }
-        ok('Ripgrep binaries installed');
+    const srcRg = join(tmpDir, 'package/vendor/ripgrep');
+    if (existsSync(srcRg)) {
+      mkdirSync(dirname(rgVendorDir), { recursive: true });
+      cpSync(srcRg, rgVendorDir, { recursive: true });
+      // Make executables
+      for (const platform of ['arm64-darwin', 'x64-darwin', 'arm64-linux', 'x64-linux']) {
+        const rgBin = join(rgVendorDir, platform, 'rg');
+        if (existsSync(rgBin)) chmodSync(rgBin, 0o755);
       }
+      for (const platform of ['arm64-win32', 'x64-win32']) {
+        const rgBin = join(rgVendorDir, platform, 'rg.exe');
+        if (existsSync(rgBin)) chmodSync(rgBin, 0o755);
+      }
+      ok('Ripgrep binaries installed');
     }
 
     // Cleanup
-    execSync(isWindows ? `rmdir /s /q "${tmpDir}"` : `rm -rf "${tmpDir}"`, { stdio: 'pipe', shell: true });
+    execSync(`rm -rf ${tmpDir}`, { stdio: 'pipe' });
   } catch (e) {
     warn(`Could not download ripgrep: ${e.message}`);
     warn('Grep/search features may not work. Install rg manually: https://github.com/BurntSushi/ripgrep');
@@ -323,9 +286,13 @@ console.log('');
 console.log('    \x1b[1m# Set your API key\x1b[0m');
 console.log('    export ANTHROPIC_API_KEY="sk-ant-xxx"');
 console.log('');
+console.log('    \x1b[1m# (Optional) Use a third-party proxy\x1b[0m');
+console.log('    export ANTHROPIC_BASE_URL="https://your-proxy.com"');
+console.log('    export DISABLE_PROMPT_CACHING=1');
+console.log('');
 console.log('    \x1b[1m# Interactive mode\x1b[0m');
 console.log('    bun src/entrypoints/cli.tsx');
 console.log('');
-console.log('    \x1b[1m# Non-interactive mode\x1b[0m');
-console.log('    bun src/entrypoints/cli.tsx -p "your prompt"');
+console.log('    \x1b[1m# Non-interactive (pipe/script) mode\x1b[0m');
+console.log('    bun src/entrypoints/cli.tsx -p "your prompt" --dangerously-skip-permissions < /dev/null');
 console.log('');

@@ -9,10 +9,10 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "paths": {
-      "*.js": ["./*.ts", "./*.tsx"]
+      "*.js": ["./*.ts", "./*.tsx", "./*.js"]
     },
     "baseUrl": ".",
     "rootDir": "."
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "preload.ts"]
+  "include": ["src/**/*", "preload.ts"]
 }

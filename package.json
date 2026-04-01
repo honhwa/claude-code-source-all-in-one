@@ -1,7 +1,7 @@
 {
   "name": "claude-code-source",
   "version": "2.1.88",
-  "description": "Claude Code source - local runnable setup",
+  "description": "Claude Code source - local runnable setup for learning",
   "type": "module",
   "scripts": {
     "setup": "node scripts/setup.mjs",
