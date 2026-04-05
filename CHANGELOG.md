@@ -2,6 +2,42 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.92 — April 4, 2026
+
+Applies the user-facing, tractable subset of the upstream 2.1.92 changelog.
+
+### Applied in this local source tree
+
+- Added `forceRemoteSettingsRefresh` policy setting: when true in managed/policy settings, the CLI blocks startup until remote managed settings are freshly fetched and exits fail-closed if the fetch fails. Useful for managed deployments where stale cached policy is unacceptable.
+- Remote Control session names now use the machine hostname as the default prefix (e.g. `myhost-graceful-unicorn`) instead of the hardcoded `remote-control-` prefix. Overridable via the `CLAUDE_CODE_REMOTE_CONTROL_SESSION_NAME_PREFIX` environment variable.
+- Removed `/tag` command (sessions are still tagged via session metadata but the interactive slash command is gone).
+- Removed `/vim` command (toggle vim mode via `/config` → Editor mode instead).
+- Bumped local source version to `2.1.92` (from `2.1.91`).
+
+### Not applied (upstream-only internal fixes)
+
+Skipped items that require forensic access to internals not faithfully present in the deobfuscated source, or are platform-specific infra fixes:
+
+- Interactive Bedrock setup wizard from the login screen
+- `/cost` per-model + cache-hit breakdown for subscription users
+- `/release-notes` interactive version picker
+- Pro-user prompt-cache-expired footer hint
+- Subagent spawning tmux pane-count failure after window kills/renumbers
+- Prompt-type Stop hooks with `ok:false` from small fast model, `preventContinuation:true` semantics
+- Tool input validation for streamed JSON-encoded array/object fields
+- API 400 on whitespace-only thinking text blocks
+- Accidental feedback-survey submissions from auto-pilot keypresses
+- Misleading "esc to interrupt" hint alongside "esc to clear" with selection active
+- Homebrew update prompts (stable vs @latest channel)
+- `ctrl+e` jumping past end-of-line in multiline prompts
+- Duplicate message at two scroll positions (DEC 2026 terminals: iTerm2, Ghostty)
+- Idle-return `/clear to save X tokens` showing cumulative instead of current-context tokens
+- Plugin MCP servers stuck "connecting" when duplicating an unauthenticated claude.ai connector
+- Write tool diff-computation 60% speedup for large files with tabs/`&`/`$`
+- Linux sandbox `apply-seccomp` helper in npm + native builds (unix-socket blocking)
+
+---
+
 ## 2.1.91 — April 2, 2026
 
 Applies the user-facing, tractable subset of the upstream 2.1.90 and 2.1.91 changelogs in a single bump.

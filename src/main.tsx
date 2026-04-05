@@ -954,7 +954,14 @@ async function run(): Promise<CommanderCommand> {
     // Fails open - if fetch fails, continues without remote settings
     // Settings are applied via hot-reload when they arrive
     // Must happen after init() to ensure config reading is allowed
-    void loadRemoteManagedSettings();
+    // When forceRemoteSettingsRefresh is set, block startup on the fetch
+    // (fail-closed — loadRemoteManagedSettings exits the process on failure). (v2.1.92)
+    const { getInitialSettings: _getInitialSettingsForRefresh } = await import('./utils/settings/settings.js');
+    if (_getInitialSettingsForRefresh().forceRemoteSettingsRefresh === true) {
+      await loadRemoteManagedSettings();
+    } else {
+      void loadRemoteManagedSettings();
+    }
     void loadPolicyLimits();
     profileCheckpoint('preAction_after_remote_settings');
 

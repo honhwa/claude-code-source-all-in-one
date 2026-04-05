@@ -252,10 +252,21 @@ export async function initReplBridge(
   // the count-1 re-derivation but not count-3). The onUserMessage callback
   // (wired to both v1 and v2 below) derives from the 1st prompt and again
   // from the 3rd so mobile/web show a title that reflects more context.
-  // The slug fallback (e.g. "remote-control-graceful-unicorn") makes
-  // auto-started sessions distinguishable in the claude.ai list before the
-  // first prompt.
-  let title = `remote-control-${generateShortWordSlug()}`
+  // The slug fallback (e.g. "myhost-graceful-unicorn") makes auto-started
+  // sessions distinguishable in the claude.ai list before the first prompt.
+  // Default prefix is the machine hostname (sanitized to [a-z0-9-], capped
+  // at 32 chars, falling back to "remote-control" if it sanitizes empty).
+  // Overridable via the CLAUDE_CODE_REMOTE_CONTROL_SESSION_NAME_PREFIX env
+  // var (v2.1.92).
+  const rawPrefix =
+    process.env.CLAUDE_CODE_REMOTE_CONTROL_SESSION_NAME_PREFIX ?? hostname()
+  const sessionPrefix =
+    rawPrefix
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 32) || 'remote-control'
+  let title = `${sessionPrefix}-${generateShortWordSlug()}`
   let hasTitle = false
   let hasExplicitTitle = false
   if (initialName) {

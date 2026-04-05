@@ -971,6 +971,15 @@ export const SettingsSchema = lazySchema(() =>
             'the shell-execution syntax is left in the prompt text verbatim ' +
             'instead of being executed. Default: false.',
         ),
+      forceRemoteSettingsRefresh: z
+        .boolean()
+        .optional()
+        .describe(
+          'Policy setting: when true, the CLI blocks startup until remote ' +
+            'managed settings are freshly fetched, and exits if the fetch ' +
+            'fails (fail-closed). Intended for managed deployments where ' +
+            'stale cached policy is unacceptable. Default: false.',
+        ),
       skipDangerousModePermissionPrompt: z
         .boolean()
         .optional()

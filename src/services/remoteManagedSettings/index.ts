@@ -531,8 +531,28 @@ export async function loadRemoteManagedSettings(): Promise<void> {
     loadingCompleteResolve = null
   }
 
+  // forceRemoteSettingsRefresh policy: when set in local managed settings,
+  // the CLI must block startup on a fresh fetch and exit if it fails
+  // (fail-closed). Read from getInitialSettings lazily — importing at top
+  // level would cycle through settings → schemas. (v2.1.92)
+  const { getInitialSettings: _getInitialSettings } = await import(
+    '../../utils/settings/settings.js'
+  )
+  const forceClosed =
+    _getInitialSettings().forceRemoteSettingsRefresh === true
+
   try {
     const settings = await fetchAndLoadRemoteManagedSettings()
+
+    if (forceClosed && settings === null && isRemoteManagedSettingsEligible()) {
+      // Fail-closed: policy demands fresh remote settings, fetch returned
+      // nothing (network / auth / server error). Exit before any tool runs.
+      process.stderr.write(
+        'forceRemoteSettingsRefresh is set but remote managed settings ' +
+          'could not be fetched. Exiting (fail-closed).\n',
+      )
+      process.exit(1)
+    }
 
     // Start background polling to pick up settings changes mid-session
     if (isRemoteManagedSettingsEligible()) {
