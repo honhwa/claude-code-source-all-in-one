@@ -1800,6 +1800,19 @@ export const fetchToolsForClient = memoizeWithLRU(
                     .trim() || undefined
                 : undefined,
             alwaysLoad: tool._meta?.['anthropic/alwaysLoad'] === true,
+            // Per-tool result persistence override: an MCP server can
+            // annotate a tool that legitimately returns large payloads
+            // (e.g. a DB-schema tool) with _meta['anthropic/maxResultSizeChars']
+            // so the result passes through to the model instead of getting
+            // persisted to disk as a preview. Capped at 500K to prevent
+            // a misbehaving server from blowing the context budget. (v2.1.91)
+            maxResultSizeChars: (() => {
+              const override = tool._meta?.['anthropic/maxResultSizeChars']
+              if (typeof override === 'number' && override > 0) {
+                return Math.min(override, 500_000)
+              }
+              return MCPTool.maxResultSizeChars
+            })(),
             async description() {
               return tool.description ?? ''
             },

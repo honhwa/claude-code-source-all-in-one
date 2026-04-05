@@ -962,6 +962,15 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Show thinking summaries in the transcript view (ctrl+o). Default: false.',
         ),
+      disableSkillShellExecution: z
+        .boolean()
+        .optional()
+        .describe(
+          'Disable inline shell execution (```! … ``` blocks and !`…` inline) ' +
+            'in skills, custom slash commands, and plugin commands. When true, ' +
+            'the shell-execution syntax is left in the prompt text verbatim ' +
+            'instead of being executed. Default: false.',
+        ),
       skipDangerousModePermissionPrompt: z
         .boolean()
         .optional()

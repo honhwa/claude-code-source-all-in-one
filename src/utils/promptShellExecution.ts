@@ -6,6 +6,7 @@ import { errorMessage, MalformedCommandError, ShellError } from './errors.js'
 import type { FrontmatterShell } from './frontmatterParser.js'
 import { createAssistantMessage } from './messages.js'
 import { hasPermissionsToUseTool } from './permissions/permissions.js'
+import { getInitialSettings } from './settings/settings.js'
 import { processToolResultBlock } from './toolResultStorage.js'
 
 // Narrow structural slice both BashTool and PowerShellTool satisfy. We can't
@@ -73,6 +74,14 @@ export async function executeShellCommandsInPrompt(
   shell?: FrontmatterShell,
 ): Promise<string> {
   let result = text
+
+  // disableSkillShellExecution: opt-out for environments that don't want
+  // skills/custom-slash-commands/plugin-commands to execute shell in the
+  // prompt-expansion step. Leave the syntax verbatim in the prompt text.
+  // (v2.1.91)
+  if (getInitialSettings().disableSkillShellExecution === true) {
+    return result
+  }
 
   // Resolve the tool once. `shell === undefined` and `shell === 'bash'` both
   // hit BashTool. PowerShell only when the runtime gate allows — a skill

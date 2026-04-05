@@ -27,6 +27,7 @@ export type LogOption = {
   messageCount: number
   fileSize?: number // File size in bytes (for display)
   isSidechain: boolean
+  entrypoint?: string // CLAUDE_CODE_ENTRYPOINT of the session's first message — used to hide sdk-cli/sdk-ts/sdk-py sessions from the /resume picker
   isLite?: boolean // True for lite logs (messages not loaded)
   sessionId?: string // Session ID for lite logs
   teamName?: string // Team name if this is a spawned agent session

@@ -1118,6 +1118,17 @@ async function cacheMarketplaceFromGit(
       pullResult.code === 0 ? undefined : classifyFetchError(pullResult.stderr),
     )
     if (pullResult.code === 0) return
+    // CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: keep the existing
+    // marketplace cache intact instead of re-cloning when git pull fails.
+    // Useful in offline/restricted environments where intermittent pull
+    // failures would otherwise wipe a working cache. (v2.1.90)
+    if (isEnvTruthy(process.env.CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE)) {
+      logForDebugging(
+        `git pull failed; keeping existing marketplace cache (CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE=1): ${pullResult.stderr}`,
+        { level: 'warn' },
+      )
+      return
+    }
     logForDebugging(`git pull failed, will re-clone: ${pullResult.stderr}`, {
       level: 'warn',
     })

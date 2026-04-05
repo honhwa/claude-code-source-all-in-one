@@ -4580,6 +4580,7 @@ type LiteMetadata = {
   firstPrompt: string
   gitBranch?: string
   isSidechain: boolean
+  entrypoint?: string
   projectPath?: string
   teamName?: string
   customTitle?: string
@@ -4664,6 +4665,7 @@ export async function loadAllLogsFromSessionFile(
       firstPrompt: extractFirstPrompt(chain),
       messageCount: countVisibleMessages(chain),
       isSidechain: firstMessage.isSidechain ?? false,
+      entrypoint: firstMessage.entrypoint,
       sessionId,
       leafUuid: leafMessage.uuid,
       summary: summaries.get(leafMessage.uuid),
@@ -4748,6 +4750,7 @@ async function readLiteMetadata(
   // Works even when the first line is truncated (>64KB message).
   const isSidechain =
     head.includes('"isSidechain":true') || head.includes('"isSidechain": true')
+  const entrypoint = extractJsonStringField(head, 'entrypoint')
   const projectPath = extractJsonStringField(head, 'cwd')
   const teamName = extractJsonStringField(head, 'teamName')
   const agentSetting = extractJsonStringField(head, 'agentSetting')
@@ -4800,6 +4803,7 @@ async function readLiteMetadata(
     firstPrompt,
     gitBranch,
     isSidechain,
+    entrypoint,
     projectPath,
     teamName,
     customTitle,
@@ -5034,6 +5038,7 @@ async function enrichLog(
     firstPrompt: meta.firstPrompt,
     gitBranch: meta.gitBranch,
     isSidechain: meta.isSidechain,
+    entrypoint: meta.entrypoint,
     teamName: meta.teamName,
     customTitle: meta.customTitle,
     summary: meta.summary,

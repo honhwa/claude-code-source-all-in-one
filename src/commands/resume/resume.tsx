@@ -188,8 +188,27 @@ function ResumeCommand({
   }
   return <LogSelector logs={logs} maxHeight={insideModal ? Math.floor(rows / 2) : rows - 2} onCancel={handleCancel} onSelect={handleSelect} onLogsChanged={() => loadLogs(showAllProjects, worktreePaths)} showAllProjects={showAllProjects} onToggleAllProjects={handleToggleAllProjects} onAgenticSearch={agenticSessionSearch} />;
 }
+/**
+ * Entrypoints that produce non-interactive sessions we should hide from
+ * the /resume picker. These sessions were created by `claude -p` (headless
+ * CLI) or one of the SDK transports — resuming them interactively is
+ * almost always noise. (v2.1.90)
+ */
+const NON_INTERACTIVE_ENTRYPOINTS = new Set([
+  'sdk-cli',
+  'sdk-ts',
+  'sdk-py',
+  'sdk-python',
+  'sdk-typescript',
+]);
+
 export function filterResumableSessions(logs: LogOption[], currentSessionId: string): LogOption[] {
-  return logs.filter(l => !l.isSidechain && getSessionIdFromLog(l) !== currentSessionId);
+  return logs.filter(
+    l =>
+      !l.isSidechain &&
+      getSessionIdFromLog(l) !== currentSessionId &&
+      !(l.entrypoint && NON_INTERACTIVE_ENTRYPOINTS.has(l.entrypoint)),
+  );
 }
 export const call: LocalJSXCommandCall = async (onDone, context, args) => {
   const onResume = async (sessionId: UUID, log: LogOption, entrypoint: ResumeEntrypoint) => {

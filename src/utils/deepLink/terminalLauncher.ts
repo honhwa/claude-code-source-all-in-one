@@ -524,7 +524,14 @@ function shellQuote(s: string): string {
  * AppleScript string literal escaping (backslash then double-quote).
  */
 function appleScriptQuote(s: string): string {
-  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+  // Literal LF/CR inside an AppleScript double-quoted string would split
+  // the source across lines and break parsing. Emit the AppleScript
+  // escape sequences instead. (v2.1.91 — multi-line deep-link prompts)
+  return `"${s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')}"`
 }
 
 /**
@@ -551,7 +558,16 @@ function psQuote(s: string): string {
  * \ before our closing " would eat the close-quote.
  */
 function cmdQuote(arg: string): string {
-  const stripped = arg.replace(/"/g, '').replace(/%/g, '%%')
+  // Strip CR/LF: cmd.exe terminates its command string on any unescaped
+  // newline, so an embedded LF would split the command and expose the
+  // tail to cmd.exe interpretation = command injection. Like `"`, LF/CR
+  // cannot be safely represented in a cmd.exe double-quoted string, so
+  // replace with a space to preserve word boundaries. (v2.1.91 —
+  // multi-line deep-link prompts)
+  const stripped = arg
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/"/g, '')
+    .replace(/%/g, '%%')
   const escaped = stripped.replace(/(\\+)$/, '$1$1')
   return `"${escaped}"`
 }

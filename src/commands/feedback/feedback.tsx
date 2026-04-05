@@ -3,6 +3,7 @@ import type { CommandResultDisplay, LocalJSXCommandContext } from '../../command
 import { Feedback } from '../../components/Feedback.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 import type { Message } from '../../types/message.js';
+import { getFeedbackUnavailableReason } from './index.js';
 
 // Shared function to render the Feedback component
 export function renderFeedbackComponent(onDone: (result?: string, options?: {
@@ -19,6 +20,11 @@ export function renderFeedbackComponent(onDone: (result?: string, options?: {
   return <Feedback abortSignal={abortSignal} messages={messages} initialDescription={initialDescription} onDone={onDone} backgroundTasks={backgroundTasks} />;
 }
 export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXCommandContext, args?: string): Promise<React.ReactNode> {
+  const unavailableReason = getFeedbackUnavailableReason();
+  if (unavailableReason) {
+    onDone(unavailableReason);
+    return null;
+  }
   const initialDescription = args || '';
   return renderFeedbackComponent(onDone, context.abortController.signal, context.messages, initialDescription);
 }

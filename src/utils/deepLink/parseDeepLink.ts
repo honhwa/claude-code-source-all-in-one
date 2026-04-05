@@ -44,6 +44,26 @@ function containsControlChars(s: string): boolean {
 }
 
 /**
+ * Like {@link containsControlChars} but permits LF (0x0A) and CR (0x0D).
+ * Used exclusively for the prompt query (`q=`), which is passed into the
+ * REPL as a multi-line prompt — not into a shell command. The terminal
+ * launcher still single-quote-escapes the value before spawning the
+ * process, and LF/CR inside POSIX single quotes / PowerShell single
+ * quotes are literal characters with no command-separator semantics.
+ * `cwd` still uses the strict check. (v2.1.91)
+ */
+function containsControlCharsExceptNewlines(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i)
+    if (code === 0x0a || code === 0x0d) continue
+    if (code <= 0x1f || code === 0x7f) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * GitHub owner/repo slug: alphanumerics, dots, hyphens, underscores,
  * exactly one slash. Keeps this from becoming a path traversal vector.
  */
@@ -139,7 +159,7 @@ export function parseDeepLink(uri: string): DeepLinkAction {
   if (rawQuery && rawQuery.trim().length > 0) {
     // Strip hidden Unicode characters (ASCII smuggling / hidden prompt injection)
     query = partiallySanitizeUnicode(rawQuery.trim())
-    if (containsControlChars(query)) {
+    if (containsControlCharsExceptNewlines(query)) {
       throw new Error('Deep link query contains disallowed control characters')
     }
     if (query.length > MAX_QUERY_LENGTH) {

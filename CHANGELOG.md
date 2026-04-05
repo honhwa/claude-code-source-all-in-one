@@ -2,6 +2,49 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.91 — April 2, 2026
+
+Applies the user-facing, tractable subset of the upstream 2.1.90 and 2.1.91 changelogs in a single bump.
+
+### Applied in this local source tree
+
+From upstream 2.1.90:
+
+- Added `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE`: when set, a failed `git pull` during marketplace refresh keeps the existing cache instead of wiping and re-cloning. Useful for offline/restricted environments.
+- Added `.husky` to the protected-directories list for `acceptEdits` mode (same protection as `.git`, `.vscode`, `.idea`, `.claude`).
+- Removed `Get-DnsClientCache` cmdlet and `ipconfig /displaydns` flag from the PowerShell tool's auto-allow list (DNS cache privacy). Users who need these can add an explicit allow rule.
+- `/resume` picker now filters out sessions created by `claude -p` or SDK transports (`sdk-cli`, `sdk-ts`, `sdk-py`) based on the session's stored `entrypoint`.
+
+From upstream 2.1.91:
+
+- MCP tool-result persistence override via `_meta["anthropic/maxResultSizeChars"]`: servers can annotate individual tools (e.g. DB-schema inspectors) to allow results up to **500K** characters to pass through without being persisted to a preview file.
+- Added `disableSkillShellExecution` setting to disable inline shell execution (```! blocks and `!\`…\`` inline) in skills, custom slash commands, and plugin commands.
+- `claude-cli://open?q=` deep links now accept URL-encoded newlines (`%0A` / `%0D`) for multi-line prompts. cmd.exe and AppleScript escape boundaries were updated to handle newlines safely (cmd.exe strips LF/CR to a space, AppleScript escapes to `\n`/`\r`).
+- `/feedback` (and its alias `/bug`) stays visible in the slash menu when disabled; invoking it now prints an explanation (third-party provider, env var, policy, etc.) instead of silently disappearing.
+- Bumped local source version to `2.1.91` (from `2.1.89`).
+
+### Not applied (upstream-only internal fixes)
+
+Skipped items that require forensic access to internals not faithfully present in the deobfuscated source, or are platform-specific infra fixes:
+
+- `/powerup` interactive lessons
+- Rate-limit dialog auto-reopen loop
+- `--resume` prompt-cache miss regression (v2.1.69+)
+- Edit/Write race with PostToolUse format-on-save hooks
+- PreToolUse hooks emitting JSON to stdout + exit code 2 not blocking
+- Collapsed search/read summary duplicated in scrollback on CLAUDE.md auto-load
+- Auto-mode boundary honor-ing ("don't push", "wait for X")
+- Click-to-expand hover colors on light terminal themes
+- UI crash on malformed tool input, header disappearance on scroll, PowerShell tool hardening (trailing `&`, `-ErrorAction Break`, archive TOCTOU, parse-fail fallback)
+- JSON.stringify MCP schema per turn, SSE linear-time streaming, long-session transcript write quadratic, /resume all-projects parallel load
+- Transcript chain breaks on `--resume` with silent write failures
+- `cmd+delete` on iTerm2/kitty/WezTerm/Ghostty/Windows Terminal
+- Plan mode container restart recovery, `permissions.defaultMode: "auto"` JSON-schema validation, Windows version cleanup protecting rollback copy
+- Improved `/claude-api` skill guidance content, Bun.stripANSI perf, shorter `old_string` anchors in Edit tool output
+- Plugins shipping executables under `bin/` (requires plugin-system changes beyond this pass)
+
+See upstream Anthropic Claude Code 2.1.90 / 2.1.91 release notes for full details.
+
 ## 2.1.89 — April 1, 2026
 
 This release applies the **user-facing, tractable subset** of the upstream 2.1.89 changelog. See "Applied" and "Not applied (upstream-only)" sections below.
