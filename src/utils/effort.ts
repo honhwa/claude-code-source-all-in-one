@@ -1,7 +1,6 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { isUltrathinkEnabled } from './thinking.js'
 import { getInitialSettings } from './settings/settings.js'
-import { isProSubscriber, isMaxSubscriber, isTeamSubscriber } from './auth.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { getAPIProvider } from './model/providers.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
@@ -333,14 +332,11 @@ export function getDefaultEffortForModel(
   // the model launch DRI and research. Default effort is a sensitive setting
   // that can greatly affect model quality and bashing.
 
-  // Default effort on Opus 4.6 to medium for Pro only.
-  // All other user types (API-key, Bedrock/Vertex/Foundry, Team, Enterprise)
-  // fall through to undefined = high.
-  if (model.toLowerCase().includes('opus-4-6')) {
-    if (isProSubscriber()) {
-      return 'medium'
-    }
-  }
+  // Upstream 2.1.117: Pro/Max subscribers on Opus 4.6 and Sonnet 4.6 now
+  // default to high (undefined) instead of medium. Previously this branch
+  // pinned Pro subscribers to medium on Opus 4.6; that override is gone so
+  // Pro/Max fall through to the "undefined = high" default alongside every
+  // other user type (API-key, Bedrock/Vertex/Foundry, Team, Enterprise).
 
   // When ultrathink feature is on, default effort to medium (ultrathink bumps to high)
   if (isUltrathinkEnabled() && modelSupportsEffort(model)) {

@@ -2,6 +2,39 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.117 — April 22, 2026
+
+Applies the user-facing, tractable subset of the upstream 2.1.117 changelog.
+
+### Applied in this local source tree
+
+- **Allowlisted `CLAUDE_CODE_FORK_SUBAGENT` in `SAFE_ENV_VARS`** — upstream enables forked subagents on external builds via this env var; managed settings can now set it without tripping the dangerous-env-var dialog (`src/utils/managedEnvConstants.ts`).
+- **Default effort on Opus 4.6 / Sonnet 4.6 for Pro/Max subscribers is now high** — removed the `isProSubscriber() → 'medium'` override in `getDefaultEffortForModel()`. Pro/Max now fall through to `undefined` (= high in the API) alongside every other user type; ultrathink branch and the ant-side overrides are unchanged (`src/utils/effort.ts`).
+- **Extended `cleanupPeriodDays` retention sweep to `~/.claude/tasks/`, `~/.claude/shell-snapshots/`, `~/.claude/backups/`** — added a shared `cleanupOldTopLevelEntries(dirName)` helper (mirrors `cleanupOldSessionEnvDirs`'s mtime-vs-cutoff pattern, but tolerates both files and directories) and three thin wrappers wired into `cleanupOldMessageFilesInBackground()`. These buckets previously grew unbounded because they match session lifetime, not user retention policy (`src/utils/cleanup.ts`).
+- **WebFetch truncates HTML before Turndown** — added `MAX_HTML_LENGTH = 2 MiB`. On multi-megabyte HTML pages Turndown's DOM build + tree walk could spin for tens of seconds; truncating before conversion yields more than `MAX_MARKDOWN_LENGTH` of markdown anyway, so the tail we drop was destined for the post-conversion cap (`src/tools/WebFetchTool/utils.ts`).
+- **OTEL `user_prompt` events now carry `command_name` and `command_source` on slash-command paths** — both the unknown-command fallthrough and the new known-command emission in `processSlashCommand.tsx` include these attributes. `command_name` is redacted to the existing `'custom'`/`'mcp'` sanitized form unless `OTEL_LOG_TOOL_DETAILS=1`. `command_source` is one of `'builtin'`, `'custom'`, `'mcp'`, or `'unknown'`. Previously valid `/slash` invocations emitted no `user_prompt` event at all (`src/utils/processUserInput/processSlashCommand.tsx`).
+- **Bumped local source version to `2.1.117`** (from `2.1.116`) — `package.json` and `preload.ts` MACRO.
+
+### Not applied (upstream-only or out of scope)
+
+- Forked-subagent dispatch for `--agent` main-thread sessions, agent-frontmatter `mcpServers` loading — subagent runner + agent-frontmatter parser live in obfuscated code.
+- `/model` pin-source indicator ("from project" / "from managed-settings" label in startup header) and persist-across-restarts-even-when-project-pins-different — requires reworking the model pin resolution + header render.
+- `/resume` stale-large-session summarize-before-read prompt — internal `/resume` UX path in obfuscated source.
+- Concurrent local + claude.ai MCP connect on startup — MCP orchestrator in obfuscated init code.
+- `plugin install` resolve missing dependencies on already-installed; `claude plugin marketplace add` dep auto-resolution; managed `blockedMarketplaces`/`strictKnownMarketplaces` enforcement on install/update/refresh/autoupdate — plugin subsystem internals.
+- Advisor Tool experimental-label + learn-more link + startup notification; Advisor stuck-on-every-prompt fix — Advisor UI + result processor in obfuscated source.
+- OTEL `cost.usage`/`token.usage`/`api_request`/`api_error` `effort` attribute — OTEL metric emission sites in obfuscated instrumentation.
+- Native macOS/Linux builds replacing Glob/Grep with bfs/ugrep via Bash; Windows `where.exe` cache — distribution/packaging + platform-specific path, N/A for this local source mirror.
+- Plain-CLI OAuth reactive token refresh on 401; `/login` when `CLAUDE_CODE_OAUTH_TOKEN` token expires — Anthropic auth client wrapper, obfuscated.
+- Proxy HTTP 204 No Content clear-error — already safely handled in `src/bridge/bridgeApi.ts`; no user-facing TypeError path in this mirror.
+- `NO_PROXY` respect under Bun, `gcpAuthRefresh` crash fix — proxy/client internals.
+- SDK `reload_plugins` serial-reconnect → parallel fix; MCP `elicitation/create` auto-cancel on mid-turn connect; subagent model malware-warning false positive; idle-render loop on Linux — SDK/MCP/render internals in obfuscated source.
+- Bedrock application-inference-profile 400 on Opus 4.7 with thinking disabled — Bedrock adapter plumbing not in scope.
+- Prompt-input Ctrl+_ undo, Kitty-protocol key coalescing edges, VSCode "Manage Plugins" large-marketplace break — TUI/input and VSCode-panel bugs below our faithful-mirror line.
+- Opus 4.7 `/context` percentage computing against 200K window instead of 1M — requires the per-model context-window table we don't mirror in full.
+
+---
+
 ## 2.1.116 — April 20, 2026
 
 Applies the user-facing, tractable subset of the upstream 2.1.116 changelog. Upstream skipped `2.1.114` and `2.1.115`.

@@ -127,6 +127,15 @@ const MAX_REDIRECTS = 10
 // Truncate to not spend too many tokens
 export const MAX_MARKDOWN_LENGTH = 100_000
 
+// Upstream 2.1.117: truncate HTML before Turndown. Without a pre-conversion
+// cap, Turndown's DOM build + tree walk on a multi-megabyte HTML page can
+// spin for tens of seconds (cheerio allocates ~3-5x the source size in the
+// DOM alone). 2 MiB comfortably fits any realistic article/docs page and
+// yields more than MAX_MARKDOWN_LENGTH bytes of markdown after conversion,
+// so the tail we drop here is already destined for the post-conversion
+// MAX_MARKDOWN_LENGTH cap anyway.
+export const MAX_HTML_LENGTH = 2 * 1024 * 1024
+
 export function isPreapprovedUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url)
@@ -454,7 +463,13 @@ export async function getURLMarkdownContent(
   let markdownContent: string
   let contentBytes: number
   if (contentType.includes('text/html')) {
-    markdownContent = (await getTurndownService()).turndown(htmlContent)
+    // Pre-conversion truncate: see MAX_HTML_LENGTH rationale. Cheaper than
+    // letting Turndown build the full DOM and then dropping the tail.
+    const htmlForTurndown =
+      htmlContent.length > MAX_HTML_LENGTH
+        ? htmlContent.slice(0, MAX_HTML_LENGTH)
+        : htmlContent
+    markdownContent = (await getTurndownService()).turndown(htmlForTurndown)
     contentBytes = Buffer.byteLength(markdownContent)
   } else {
     // It's not HTML - just use it raw. The decoded string's UTF-8 byte

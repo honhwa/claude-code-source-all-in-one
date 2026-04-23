@@ -40,6 +40,7 @@ import { isRestrictedToPluginOnly, isSourceAdminTrusted } from '../settings/plug
 import { parseSlashCommand } from '../slashCommandParsing.js';
 import { sleep } from '../sleep.js';
 import { recordSkillUsage } from '../suggestions/skillUsageTracking.js';
+import { isToolDetailsLoggingEnabled } from '../../services/analytics/metadata.js';
 import { logOTelEvent, redactIfDisabled } from '../telemetry/events.js';
 import { buildPluginCommandTelemetryFields } from '../telemetry/pluginTelemetry.js';
 import { getAssistantMessageContentLength } from '../tokens.js';
@@ -362,11 +363,19 @@ export async function processSlashCommand(inputString: string, precedingInputBlo
     const promptId = randomUUID();
     setPromptId(promptId);
     logEvent('tengu_input_prompt', {});
-    // Log user prompt event for OTLP
+    // Log user prompt event for OTLP.
+    // Upstream 2.1.117: include command_name/command_source so downstream
+    // dashboards can filter slashed-but-not-real-command input separately
+    // from genuine text prompts. command_source is 'unknown' here because
+    // hasCommand() returned false — no Command object to consult for a
+    // loadedFrom. command_name follows the redact-unless-OTEL_LOG_TOOL_DETAILS
+    // rule (custom/MCP names are PII-adjacent).
     void logOTelEvent('user_prompt', {
       prompt_length: String(inputString.length),
       prompt: redactIfDisabled(inputString),
-      'prompt.id': promptId
+      'prompt.id': promptId,
+      command_name: isToolDetailsLoggingEnabled() ? commandName : sanitizedCommandName,
+      command_source: 'unknown'
     });
     return {
       messages: [createUserMessage({
@@ -378,6 +387,28 @@ export async function processSlashCommand(inputString: string, precedingInputBlo
       }), ...attachmentMessages],
       shouldQuery: true
     };
+  }
+
+  // Upstream 2.1.117: known-slash-command path now emits user_prompt with
+  // command_name and command_source. Previously only the unknown-command
+  // fallthrough emitted this event, so /slash invocations silently dropped
+  // out of OTEL user_prompt dashboards. command_source is 'builtin', 'mcp',
+  // or 'custom' based on sanitizedCommandName; command_name is the raw name
+  // when OTEL_LOG_TOOL_DETAILS=1, otherwise the sanitized form.
+  {
+    const promptId = randomUUID();
+    setPromptId(promptId);
+    void logOTelEvent('user_prompt', {
+      prompt_length: String(inputString.length),
+      prompt: redactIfDisabled(inputString),
+      'prompt.id': promptId,
+      command_name: isToolDetailsLoggingEnabled() ? commandName : sanitizedCommandName,
+      command_source: isMcp
+        ? 'mcp'
+        : sanitizedCommandName === 'custom'
+          ? 'custom'
+          : 'builtin'
+    });
   }
 
   // Track slash command usage for feature discovery

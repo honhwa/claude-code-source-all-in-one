@@ -388,6 +388,65 @@ export async function cleanupOldSessionEnvDirs(): Promise<CleanupResult> {
 }
 
 /**
+ * Upstream 2.1.117: the cleanupPeriodDays sweep now covers ~/.claude/tasks/,
+ * ~/.claude/shell-snapshots/, and ~/.claude/backups/ in addition to the
+ * existing message/session/plan/file-history/session-env directories. These
+ * three directories accumulate files that match the session lifetime, not
+ * the user retention policy, so without this sweep they grow unbounded.
+ *
+ * Unlike cleanupOldSessionEnvDirs (which expects one directory per session),
+ * these buckets may hold a mix of files and directories — walk top-level
+ * entries and rm whatever has an mtime older than the cutoff. Failures per
+ * entry are tallied in errors but never abort the sweep.
+ */
+async function cleanupOldTopLevelEntries(
+  dirName: string,
+): Promise<CleanupResult> {
+  const cutoffDate = getCutoffDate()
+  const result: CleanupResult = { messages: 0, errors: 0 }
+  const fsImpl = getFsImplementation()
+  const configDir = getClaudeConfigHomeDir()
+  const dirPath = join(configDir, dirName)
+
+  let dirents
+  try {
+    dirents = await fsImpl.readdir(dirPath)
+  } catch {
+    // Directory absent is the common case on fresh installs — treat as no-op.
+    return result
+  }
+
+  for (const dirent of dirents) {
+    const entryPath = join(dirPath, dirent.name)
+    try {
+      const stats = await fsImpl.stat(entryPath)
+      if (stats.mtime >= cutoffDate) continue
+      await fsImpl.rm(entryPath, { recursive: true, force: true })
+      result.messages++
+    } catch {
+      result.errors++
+    }
+  }
+
+  // Remove the parent if it's now empty so /doctor doesn't report dangling
+  // empty directories. No-op when other tools are concurrently using it.
+  await tryRmdir(dirPath, fsImpl)
+  return result
+}
+
+export function cleanupOldTasksDir(): Promise<CleanupResult> {
+  return cleanupOldTopLevelEntries('tasks')
+}
+
+export function cleanupOldShellSnapshotsDir(): Promise<CleanupResult> {
+  return cleanupOldTopLevelEntries('shell-snapshots')
+}
+
+export function cleanupOldBackupsDir(): Promise<CleanupResult> {
+  return cleanupOldTopLevelEntries('backups')
+}
+
+/**
  * Cleans up old debug log files from ~/.claude/debug/
  * Preserves the 'latest' symlink which points to the current session's log.
  * Debug logs can grow very large (especially with the infinite logging loop bug)
@@ -592,6 +651,10 @@ export async function cleanupOldMessageFilesInBackground(): Promise<void> {
   await cleanupOldDebugLogs()
   await cleanupOldImageCaches()
   await cleanupOldPastes(getCutoffDate())
+  // Upstream 2.1.117: retention sweep now covers three additional dirs.
+  await cleanupOldTasksDir()
+  await cleanupOldShellSnapshotsDir()
+  await cleanupOldBackupsDir()
   const removedWorktrees = await cleanupStaleAgentWorktrees(getCutoffDate())
   if (removedWorktrees > 0) {
     logEvent('tengu_worktree_cleanup', { removed: removedWorktrees })
