@@ -3507,7 +3507,12 @@ export async function* executePostToolHooks<ToolInput, ToolResponse>(
   permissionMode?: string,
   signal?: AbortSignal,
   timeoutMs: number = TOOL_HOOK_EXECUTION_TIMEOUT_MS,
+  durationMs?: number,
 ): AsyncGenerator<AggregatedHookResult> {
+  // Upstream 2.1.119: hook input now carries duration_ms. Caller passes the
+  // tool-execution wall time captured between the post-permission startTime
+  // and the tool.call() resolution — i.e. excluding permission prompts and
+  // PreToolUse hook runtime. Omitted when the caller doesn't track it.
   const hookInput: PostToolUseHookInput = {
     ...createBaseHookInput(permissionMode, undefined, toolUseContext),
     hook_event_name: 'PostToolUse',
@@ -3515,6 +3520,7 @@ export async function* executePostToolHooks<ToolInput, ToolResponse>(
     tool_input: resolveFilePathForHook(toolName, toolInput),
     tool_response: toolResponse,
     tool_use_id: toolUseID,
+    ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
   }
 
   yield* executeHooks({
@@ -3550,6 +3556,7 @@ export async function* executePostToolUseFailureHooks<ToolInput>(
   permissionMode?: string,
   signal?: AbortSignal,
   timeoutMs: number = TOOL_HOOK_EXECUTION_TIMEOUT_MS,
+  durationMs?: number,
 ): AsyncGenerator<AggregatedHookResult> {
   const appState = toolUseContext.getAppState()
   const sessionId = toolUseContext.agentId ?? getSessionId()
@@ -3557,6 +3564,7 @@ export async function* executePostToolUseFailureHooks<ToolInput>(
     return
   }
 
+  // Upstream 2.1.119: failure hook input also carries duration_ms.
   const hookInput: PostToolUseFailureHookInput = {
     ...createBaseHookInput(permissionMode, undefined, toolUseContext),
     hook_event_name: 'PostToolUseFailure',
@@ -3565,6 +3573,7 @@ export async function* executePostToolUseFailureHooks<ToolInput>(
     tool_use_id: toolUseID,
     error,
     is_interrupt: isInterrupt,
+    ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
   }
 
   yield* executeHooks({

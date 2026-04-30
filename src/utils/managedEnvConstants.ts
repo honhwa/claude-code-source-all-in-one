@@ -145,6 +145,8 @@ export const SAFE_ENV_VARS = new Set([
   'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
   // Upstream 2.1.117: forked subagents on external builds (previously ant-only).
   'CLAUDE_CODE_FORK_SUBAGENT',
+  // Upstream 2.1.119: hide the working directory in the startup logo.
+  'CLAUDE_CODE_HIDE_CWD',
   'CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL',
   'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
   'CLAUDE_CODE_SKIP_BEDROCK_AUTH',

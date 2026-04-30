@@ -46,6 +46,10 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
   requestId: string | undefined,
   mcpServerType: McpServerType,
   mcpServerBaseUrl: string | undefined,
+  // Upstream 2.1.119: tool-call duration in ms (excluding permission prompts
+  // and PreToolUse hooks). Forwarded into the PostToolUse hook input so
+  // hooks can decide e.g. to skip lint runs after a sub-second tool call.
+  toolDurationMs?: number,
 ): AsyncGenerator<PostToolUseHooksResult<Output>> {
   const postToolStartTime = Date.now()
   try {
@@ -61,6 +65,8 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
       toolUseContext,
       permissionMode,
       toolUseContext.abortController.signal,
+      undefined,
+      toolDurationMs,
     )) {
       try {
         // Check if we were aborted during hook execution
@@ -201,6 +207,10 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
   requestId: string | undefined,
   mcpServerType: McpServerType,
   mcpServerBaseUrl: string | undefined,
+  // Upstream 2.1.119: tool-call duration before failure (ms). Same exclusion
+  // semantics as the success path — permission prompts + PreToolUse hooks
+  // are not counted.
+  toolDurationMs?: number,
 ): AsyncGenerator<
   MessageUpdateLazy<AttachmentMessage | ProgressMessage<HookProgress>>
 > {
@@ -218,6 +228,8 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
       isInterrupt,
       permissionMode,
       toolUseContext.abortController.signal,
+      undefined,
+      toolDurationMs,
     )) {
       try {
         // Check if we were aborted during hook execution

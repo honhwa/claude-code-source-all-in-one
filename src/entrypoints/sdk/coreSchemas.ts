@@ -441,6 +441,11 @@ export const PostToolUseHookInputSchema = lazySchema(() =>
       tool_input: z.unknown(),
       tool_response: z.unknown(),
       tool_use_id: z.string(),
+      // Upstream 2.1.119: tool execution time in milliseconds, excluding the
+      // permission-prompt window and PreToolUse hook runtime. Optional for
+      // back-compat with older hook consumers and for the rare path where
+      // the duration isn't tracked (early-return failures).
+      duration_ms: z.number().int().nonnegative().optional(),
     }),
   ),
 )
@@ -454,6 +459,9 @@ export const PostToolUseFailureHookInputSchema = lazySchema(() =>
       tool_use_id: z.string(),
       error: z.string(),
       is_interrupt: z.boolean().optional(),
+      // Upstream 2.1.119: tool execution time before failure, in milliseconds,
+      // excluding permission prompts and PreToolUse hook runtime.
+      duration_ms: z.number().int().nonnegative().optional(),
     }),
   ),
 )

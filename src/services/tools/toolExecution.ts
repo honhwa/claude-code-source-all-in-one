@@ -963,6 +963,9 @@ async function checkPermissionsAndCallTool(
       decision,
       source,
       tool_name: sanitizeToolNameForAnalytics(tool.name),
+      // Upstream 2.1.119: tool_use_id lets dashboards correlate tool_decision
+      // with the matching tool_result emission for the same call.
+      tool_use_id: toolUseID,
     })
 
     // Increment code-edit tool decision counter for headless mode
@@ -1378,14 +1381,29 @@ async function checkPermissionsAndCallTool(
       ? getMcpServerScopeFromToolName(tool.name)
       : null
 
+    // Upstream 2.1.119: tool_input_size_bytes — emitted unconditionally
+    // (size is not PII) so dashboards can correlate result size with input
+    // size without OTEL_LOG_TOOL_DETAILS. Computed once from processedInput
+    // since `tool_input` text content already gates on the env var below.
+    const toolInputSizeBytes = (() => {
+      try {
+        return Buffer.byteLength(jsonStringify(processedInput))
+      } catch {
+        return 0
+      }
+    })()
+
     void logOTelEvent('tool_result', {
       tool_name: sanitizeToolNameForAnalytics(tool.name),
+      // Upstream 2.1.119: pair tool_result with tool_decision via tool_use_id.
+      tool_use_id: toolUseID,
       success: 'true',
       duration_ms: String(durationMs),
       ...(Object.keys(toolParameters).length > 0 && {
         tool_parameters: jsonStringify(toolParameters),
       }),
       ...(telemetryToolInput && { tool_input: telemetryToolInput }),
+      tool_input_size_bytes: String(toolInputSizeBytes),
       tool_result_size_bytes: String(toolResultSizeBytes),
       ...(decisionInfo && {
         decision_source: decisionInfo.source,
@@ -1490,6 +1508,9 @@ async function checkPermissionsAndCallTool(
       requestId,
       mcpServerType,
       mcpServerBaseUrl,
+      // Upstream 2.1.119: forward the tool-call duration captured above so
+      // PostToolUse hooks see duration_ms in their stdin payload.
+      durationMs,
     )) {
       if ('updatedMCPToolOutput' in hookResult) {
         if (isMcpTool(tool)) {
@@ -1671,9 +1692,22 @@ async function checkPermissionsAndCallTool(
         ? getMcpServerScopeFromToolName(tool.name)
         : null
 
+      // Upstream 2.1.119: input size attribute also added on the failure
+      // path so dashboards see a value for every tool_result emission.
+      const toolInputSizeBytesOnError = (() => {
+        try {
+          return Buffer.byteLength(jsonStringify(processedInput))
+        } catch {
+          return 0
+        }
+      })()
+
       void logOTelEvent('tool_result', {
         tool_name: sanitizeToolNameForAnalytics(tool.name),
-        use_id: toolUseID,
+        // Upstream 2.1.119: tool_use_id (was "use_id" — a long-standing typo
+        // that left the failure path's correlation key under a different name
+        // than the success path's planned tool_use_id).
+        tool_use_id: toolUseID,
         success: 'false',
         duration_ms: String(durationMs),
         error: errorMessage(error),
@@ -1681,6 +1715,7 @@ async function checkPermissionsAndCallTool(
           tool_parameters: jsonStringify(toolParameters),
         }),
         ...(telemetryToolInput && { tool_input: telemetryToolInput }),
+        tool_input_size_bytes: String(toolInputSizeBytesOnError),
         ...(decisionInfo && {
           decision_source: decisionInfo.source,
           decision_type: decisionInfo.decision,
@@ -1708,6 +1743,10 @@ async function checkPermissionsAndCallTool(
       requestId,
       mcpServerType,
       mcpServerBaseUrl,
+      // Upstream 2.1.119: pre-failure tool duration. `durationMs` here was
+      // captured at line 1593 above and reflects the time spent inside the
+      // (now-failing) tool.call(), excluding permissions and PreToolUse.
+      durationMs,
     )) {
       hookMessages.push(hookResult)
     }

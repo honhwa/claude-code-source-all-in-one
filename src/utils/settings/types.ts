@@ -372,6 +372,17 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           "Include built-in commit and PR workflow instructions in Claude's system prompt (default: true)",
         ),
+      prUrlTemplate: z
+        .string()
+        .optional()
+        .describe(
+          'Custom URL template for the footer PR badge. Replaces the default ' +
+            'github.com link with a code-review URL of your choice. ' +
+            'Supports {owner}, {repo}, and {pr} placeholders, e.g. ' +
+            '"https://gitlab.example.com/{owner}/{repo}/-/merge_requests/{pr}". ' +
+            'Leave unset to keep the default github.com behaviour. ' +
+            'Upstream 2.1.119.',
+        ),
       permissions: PermissionsSchema()
         .optional()
         .describe('Tool usage permissions configuration'),

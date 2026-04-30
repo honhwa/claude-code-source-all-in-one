@@ -18,6 +18,8 @@ import type { VimMode } from '../types/textInputTypes.js';
 import { checkHasTrustDialogAccepted } from '../utils/config.js';
 import { calculateContextPercentages, getContextWindowForModel } from '../utils/context.js';
 import { getCwd } from '../utils/cwd.js';
+import { getDisplayedEffortLevel, modelSupportsEffort } from '../utils/effort.js';
+import { shouldEnableThinkingByDefault } from '../utils/thinking.js';
 import { logForDebugging } from '../utils/debug.js';
 import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
 import { createBaseHookInput, executeStatusLineCommand } from '../utils/hooks.js';
@@ -33,7 +35,7 @@ export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
   if (feature('KAIROS') && getKairosActive()) return false;
   return settings?.statusLine !== undefined;
 }
-function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200kTokens: boolean, settings: ReadonlySettings, messages: Message[], addedDirs: string[], mainLoopModel: ModelName, vimMode?: VimMode): StatusLineCommandInput {
+function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200kTokens: boolean, settings: ReadonlySettings, messages: Message[], addedDirs: string[], mainLoopModel: ModelName, vimMode?: VimMode, effortValue?: import('../utils/effort.js').EffortValue): StatusLineCommandInput {
   const agentType = getMainThreadAgentType();
   const worktreeSession = getCurrentWorktreeSession();
   const runtimeModel = getRuntimeMainLoopModel({
@@ -122,7 +124,19 @@ function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200k
         original_cwd: worktreeSession.originalCwd,
         original_branch: worktreeSession.originalBranch
       }
-    })
+    }),
+    // Upstream 2.1.119: effort.level and thinking.enabled in the stdin JSON
+    // so user statusLine scripts can render them without re-deriving from
+    // settings + model. effort is omitted on models that don't support it,
+    // matching the displayed-effort logic in /effort.
+    ...(modelSupportsEffort(runtimeModel) && {
+      effort: {
+        level: getDisplayedEffortLevel(runtimeModel, effortValue)
+      }
+    }),
+    thinking: {
+      enabled: shouldEnableThinkingByDefault()
+    }
   };
 }
 type Props = {
@@ -153,6 +167,10 @@ function StatusLineInner({
   // re-reads settings.json on every call, so another session's /model write
   // would leak into this session's statusline (anthropics/claude-code#37596).
   const mainLoopModel = useMainLoopModel();
+  // Upstream 2.1.119: surface effort.level in the statusline stdin JSON.
+  // Read from AppState (same source as the runtime model gate above) so the
+  // statusline reacts to /effort changes without re-reading settings.
+  const effortValue = useAppState(s => s.effortValue);
 
   // Keep latest values in refs for stable callback access
   const settingsRef = useRef(settings);
@@ -165,6 +183,8 @@ function StatusLineInner({
   addedDirsRef.current = additionalWorkingDirectories;
   const mainLoopModelRef = useRef(mainLoopModel);
   mainLoopModelRef.current = mainLoopModel;
+  const effortValueRef = useRef(effortValue);
+  effortValueRef.current = effortValue;
 
   // Track previous state to detect changes and cache expensive calculations
   const previousStateRef = useRef<{
@@ -206,7 +226,7 @@ function StatusLineInner({
         previousStateRef.current.messageId = currentMessageId;
         previousStateRef.current.exceeds200kTokens = exceeds200kTokens;
       }
-      const statusInput = buildStatusLineCommandInput(permissionModeRef.current, exceeds200kTokens, settingsRef.current, msgs, Array.from(addedDirsRef.current.keys()), mainLoopModelRef.current, vimModeRef.current);
+      const statusInput = buildStatusLineCommandInput(permissionModeRef.current, exceeds200kTokens, settingsRef.current, msgs, Array.from(addedDirsRef.current.keys()), mainLoopModelRef.current, vimModeRef.current, effortValueRef.current);
       const text = await executeStatusLineCommand(statusInput, controller.signal, undefined, logResult);
       if (!controller.signal.aborted) {
         setAppState(prev => {

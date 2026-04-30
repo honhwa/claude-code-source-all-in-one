@@ -2,6 +2,34 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.119 — April 23, 2026
+
+Applies the user-facing, tractable subset of the upstream 2.1.119 changelog (same-day double-release with 2.1.118).
+
+### Applied in this local source tree
+
+- **Added `prUrlTemplate` setting** — points the footer PR badge at a custom code-review URL instead of github.com. Schema-only addition with `{owner}`, `{repo}`, `{pr}` placeholders documented in the describe (`src/utils/settings/types.ts`).
+- **Added `CLAUDE_CODE_HIDE_CWD` env var** — gates the cwd line in the startup logo via `getLogoDisplayData()`. When connected to a remote server we still surface the server identity (the more privacy-relevant signal), but the local path is suppressed. Allowlisted in `SAFE_ENV_VARS` (`src/utils/logoV2Utils.ts`, `src/utils/managedEnvConstants.ts`).
+- **Hooks: `PostToolUse` and `PostToolUseFailure` inputs now include `duration_ms`** — wall time of `tool.call()`, excluding permission prompts and PreToolUse hooks. Threaded from the existing `durationMs` capture in `toolExecution.ts` through `runPostToolUseHooks` / `runPostToolUseFailureHooks` into `executePostToolHooks` / `executePostToolUseFailureHooks`. Schema (`PostToolUseHookInputSchema`, `PostToolUseFailureHookInputSchema`) extended with optional `duration_ms` field for back-compat (`src/utils/hooks.ts`, `src/services/tools/toolHooks.ts`, `src/services/tools/toolExecution.ts`, `src/entrypoints/sdk/coreSchemas.ts`).
+- **OTEL `tool_decision` and `tool_result` events now include `tool_use_id`; `tool_result` also includes `tool_input_size_bytes`** — emission sites in `toolExecution.ts` updated. `tool_use_id` lets dashboards correlate decision and result for the same call. Also fixed a long-standing typo on the failure path that wrote `use_id` instead of `tool_use_id`. `tool_input_size_bytes` is emitted unconditionally on both success and failure paths (size is not PII) so dashboards see a value for every emission (`src/services/tools/toolExecution.ts`).
+- **Status line stdin JSON now includes `effort.level` and `thinking.enabled`** — `buildStatusLineCommandInput()` reads `effortValue` from AppState (same source as the runtime model gate, so /effort changes flow without re-reading settings) and `shouldEnableThinkingByDefault()` from the existing thinking helper. `effort` is omitted on models that don't support effort, matching the displayed-effort logic (`src/components/StatusLine.tsx`).
+- **Tool search disabled by default on Vertex AI** — Vertex rejects the beta header that tool search emits with "tool_reference is not a valid block type". `isToolSearchEnabledOptimistic()` now returns false on `getAPIProvider() === 'vertex'` unless the user explicitly sets `ENABLE_TOOL_SEARCH`, matching the existing escape hatch for non-first-party gateways (`src/utils/toolSearch.ts`).
+- **Bumped local source version to `2.1.119`** (from `2.1.118`) — `package.json` and `preload.ts` MACRO.
+
+### Not applied (upstream-only or out of scope)
+
+- `/config` settings full settings.json persistence + project/local/policy precedence migration — most theme/fastMode/effort settings already persist via `updateSettingsForSource('userSettings', ...)` in this mirror; the upstream change is a deeper rework of which `/config` knobs go to disk and the precedence chain that we don't fully replicate.
+- `--from-pr` accepting GitLab merge-request, Bitbucket pull-request, GitHub Enterprise — current `--from-pr` resolution sits in obfuscated session-search code; pattern matching extension would need that to land first.
+- `--print` mode honoring agent `tools:` / `disallowedTools:` frontmatter; `--agent <name>` honoring agent `permissionMode` for built-ins — agent runner internals not in this mirror's surface.
+- PowerShell auto-approval matching Bash — Bash classifier path (`feature('BASH_CLASSIFIER')`) has no PowerShell counterpart in this source.
+- Subagent + SDK MCP server reconfiguration parallelization — MCP orchestrator internals in obfuscated source.
+- Plugin pinned-by-other-plugin auto-update to highest satisfying tag — plugin subsystem internals.
+- Vim-mode `Esc` queued-message restore + double-Esc interrupt; slash-command typeahead match-highlighting + multi-line description wrap; `owner/repo#N` shorthand using local git remote host — Ink/TUI rendering and input internals.
+- Security: `blockedMarketplaces` `hostPattern`/`pathPattern` enforcement — plugin subsystem.
+- CRLF/Windows clipboard double-newline; Kitty bracketed-paste newline loss; Glob/Grep disappearing on native macOS/Linux when Bash denied; fullscreen scrollback bottom-snap; MCP HTTP non-JSON OAuth body; Rewind "(no prompt)" image attachments; auto-mode overriding plan-mode; async PostToolUse empty-payload transcript; spinner orphan after subagent notification; `@-file` Tab in slash-command absolute path; Terminal.app stray `p` on Docker/SSH; HTTP/SSE/WebSocket MCP `${ENV_VAR}` header substitution; OAuth `--client-secret` `client_secret_post` exchange; `/skills` Enter pre-fill; `/agents` "Unrecognized" mislabeling; Windows plugin MCP cache spawn; `/export` model display; verbose persistence; `/usage` progress-bar overlap; plugin `${user_config.*}` optional fields; sentence-final number wrap; `/plan` and `/plan open` action; pre-compaction skill re-execution; `/reload-plugins` + `/doctor` disabled-plugin errors; Agent worktree-isolation stale reuse; disabled MCP "failed" in `/status`; `TaskList` ID sort; `gh` rate-limit hint false positive; SDK/bridge `read_file` size cap; PR linking under git worktree; `/doctor` MCP override warning; Windows `cmd /c` MCP false positive; VSCode voice dictation first-recording — terminal/UI/MCP/plugin/Windows internals below the faithful-mirror line.
+
+---
+
 ## 2.1.118 — April 23, 2026
 
 Applies the user-facing, tractable subset of the upstream 2.1.118 changelog.

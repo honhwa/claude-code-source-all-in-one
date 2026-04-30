@@ -310,6 +310,23 @@ export function isToolSearchEnabledOptimistic(): boolean {
     return false
   }
 
+  // Upstream 2.1.119: Vertex AI rejects the beta header that tool search
+  // emits with "tool_reference is not a valid block type". Default off on
+  // Vertex unless the user explicitly opts in via ENABLE_TOOL_SEARCH; same
+  // escape hatch as the non-first-party gate above.
+  if (
+    !process.env.ENABLE_TOOL_SEARCH &&
+    getAPIProvider() === 'vertex'
+  ) {
+    if (!loggedOptimistic) {
+      loggedOptimistic = true
+      logForDebugging(
+        '[ToolSearch:optimistic] disabled on Vertex AI (tool_reference beta unsupported). Set ENABLE_TOOL_SEARCH=true to opt in if your gateway accepts the header.',
+      )
+    }
+    return false
+  }
+
   if (!loggedOptimistic) {
     loggedOptimistic = true
     logForDebugging(

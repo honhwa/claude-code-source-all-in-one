@@ -3,6 +3,7 @@ import { stringWidth } from '../ink/stringWidth.js'
 import type { LogOption } from '../types/logs.js'
 import { getSubscriptionName, isClaudeAISubscriber } from './auth.js'
 import { getCwd } from './cwd.js'
+import { isEnvTruthy } from './envUtils.js'
 import { getDisplayPath } from './file.js'
 import {
   truncate,
@@ -247,11 +248,20 @@ export function getLogoDisplayData(): {
 } {
   const version = process.env.DEMO_VERSION ?? MACRO.VERSION
   const serverUrl = getDirectConnectServerUrl()
-  const displayPath = process.env.DEMO_VERSION
-    ? '/code/claude'
-    : getDisplayPath(getCwd())
+  // Upstream 2.1.119: CLAUDE_CODE_HIDE_CWD blanks the cwd line in the logo.
+  // When the user is connected to a remote server we still surface the
+  // server identity (it is the more privacy-relevant signal anyway), but
+  // the local path is suppressed.
+  const hideCwd = isEnvTruthy(process.env.CLAUDE_CODE_HIDE_CWD)
+  const displayPath = hideCwd
+    ? ''
+    : process.env.DEMO_VERSION
+      ? '/code/claude'
+      : getDisplayPath(getCwd())
   const cwd = serverUrl
-    ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
+    ? hideCwd
+      ? serverUrl.replace(/^https?:\/\//, '')
+      : `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
     : displayPath
   const billingType = isClaudeAISubscriber()
     ? getSubscriptionName()
