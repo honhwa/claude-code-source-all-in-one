@@ -2,6 +2,40 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.118 — April 23, 2026
+
+Applies the user-facing, tractable subset of the upstream 2.1.118 changelog.
+
+### Applied in this local source tree
+
+- **Added `DISABLE_UPDATES` env var** — stricter than `DISABLE_AUTOUPDATER`: also blocks the manual `claude update` path, not just the background auto-update. Wired into `getAutoUpdaterDisabledReason()` (returned with `envVar: 'DISABLE_UPDATES'` so `/doctor` shows the right reason); new `areManualUpdatesDisabled()` helper for any future manual-update command to consult. Added to `SAFE_ENV_VARS` so managed deployments can set it without the dangerous-env-var dialog (`src/utils/config.ts`, `src/utils/managedEnvConstants.ts`).
+- **Added `wslInheritsWindowsSettings` policy key** — when set true in managed-settings.json, a Claude Code session running inside WSL inherits managed settings from the Windows-side managed-settings.json. Lets a single Windows managed deployment cover both native Windows and WSL sessions (`src/utils/settings/types.ts`). Schema only — actual WSL-side merge is a Windows runtime detail not present in this mirror.
+- **Hooks can now invoke MCP tools directly via `type: "mcp_tool"`** — added `McpToolHookSchema` (server, tool, optional arguments record, plus the standard `if`/`timeout`/`statusMessage`/`once` fields), wired into the `HookCommandSchema` discriminated union, exported `McpToolHook` type, and extended `hooksSettings.ts` switch cases (`hookCommandsAreEqual` + `getHookDisplayText`) so the new variant is identity-comparable and renders as `${server}.${tool}` in /hooks. The actual hook executor still routes only the existing variants — adding the dispatch path is a follow-up; this lands the schema and identity surface so settings.json validation accepts the new shape and unknown executor variants don't trip exhaustive-switch fallthroughs (`src/schemas/hooks.ts`, `src/utils/hooks/hooksSettings.ts`).
+- **Auto mode: `"$defaults"` sentinel in `autoMode.allow` / `soft_deny` / `environment` keeps the built-in list alongside custom rules** — `buildYoloSystemPrompt()` now splits each user-supplied array into a `keepDefault` flag (true iff `"$defaults"` is present) and the user-rules tail. Built-in rules are included when the user provided no list (preserving prior default-on behavior) OR when `"$defaults"` is present; a non-empty list without the sentinel now REPLACES built-ins, matching upstream documented semantics. The sentinel itself is stripped before rules go into the prompt so it never surfaces as a literal entry. Schema descriptions updated to document the new contract (`src/utils/permissions/yoloClassifier.ts`, `src/utils/settings/types.ts`).
+- **Bumped local source version to `2.1.118`** (from `2.1.117`) — `package.json` and `preload.ts` MACRO.
+
+### Not applied (upstream-only or out of scope)
+
+- Vim visual-mode `v` / visual-line `V` (selection, operators, visual feedback) — input/TUI rendering work in obfuscated Ink components.
+- Merge `/cost` and `/stats` into `/usage` tabs while keeping both as typing shortcuts — `/cost` is a `local` text command, `/stats` and `/usage` are `local-jsx`; merging them as tabs requires turning `/cost` into a JSX component and reshaping the Settings tabs UI which sits in obfuscated source.
+- Named custom themes via `/theme create`/`switch` + `~/.claude/themes/` JSON files + plugin `themes/` directory — theme system + plugin scaffold restructure beyond the local mirror's surface.
+- Auto-mode "Don't ask again" opt-in checkbox — auto-mode dialog UI in obfuscated Ink source.
+- `claude plugin tag` for creating plugin release git tags with version validation — plugin CLI subcommand outside this mirror.
+- `--continue`/`--resume` finding sessions added via `/add-dir` — session-discovery internals.
+- `/color` syncing accent color to claude.ai/code over Remote Control — bridge feature.
+- `/model` picker honoring `ANTHROPIC_DEFAULT_*_MODEL_NAME`/`_DESCRIPTION` overrides under custom `ANTHROPIC_BASE_URL` gateways — model picker UI internals.
+- Auto-update plugin-skip surfacing in `/doctor` and `/plugin Errors` tab — plugin subsystem internals.
+- Various MCP OAuth fixes (headersHelper menu, custom-headers stuck "needs auth", missing `expires_in`, step-up `insufficient_scope` re-consent, OAuth flow timeout/cancel unhandled rejection, refresh cross-process lock, macOS keychain race, server-revoked tokens, `~/.claude/.credentials.json` corruption on Linux/Windows) — auth client/MCP OAuth internals in obfuscated source.
+- `/login` in CLAUDE_CODE_OAUTH_TOKEN-launched session not clearing the env token — auth bootstrap path.
+- Unreadable text in "new messages" scroll pill / `/plugin` badges — Ink color theme internals.
+- Plan-acceptance dialog "auto mode" vs "bypass permissions" labelling under `--dangerously-skip-permissions` — dialog UI in obfuscated source.
+- Agent-type hooks "Messages are required for agent hooks" failure on non-Stop events; prompt hooks re-firing on agent-hook verifier subagent tool calls — hook executor internals.
+- `/fork` writing full parent conversation per fork (now pointer + hydrate) — session storage internals.
+- `Alt+K` / `Alt+X` / `Alt+^` / `Alt+_` keyboard freezes — Ink keypress edge cases.
+- Remote-session connect overwriting local model setting; typeahead "No commands match" on pasted slash file paths; plugin install dep wrong-version re-resolve; file-watcher ENOENT/EMFILE unhandled errors; CCR transient blip session archival; SendMessage subagent `cwd` restore — Remote/plugin/session internals.
+
+---
+
 ## 2.1.117 — April 22, 2026
 
 Applies the user-facing, tractable subset of the upstream 2.1.117 changelog.

@@ -498,14 +498,48 @@ export async function buildYoloSystemPrompt(
   const includePowerShellGuidance = feature('POWERSHELL_AUTO_MODE')
     ? !usingExternal
     : false
+
+  // Upstream 2.1.118: the literal "$defaults" entry in any of the autoMode
+  // arrays opts in to merging the built-in list. Without it, a non-empty
+  // user array replaces the built-ins (matches upstream's documented
+  // semantics); with it, user rules are additive. We split this once per
+  // array and reuse: keepDefault flips the include flag, userRules drops
+  // the sentinel so it doesn't surface as a literal rule in the prompt.
+  const DEFAULTS_SENTINEL = '$defaults'
+  function splitDefaults(
+    raw: readonly string[] | undefined,
+  ): { keepDefault: boolean; userRules: string[]; hadAny: boolean } {
+    const list = raw ?? []
+    const hadAny = list.length > 0
+    const keepDefault = list.includes(DEFAULTS_SENTINEL)
+    const userRules = list.filter(r => r !== DEFAULTS_SENTINEL)
+    return { keepDefault, userRules, hadAny }
+  }
+  const allowSplit = splitDefaults(autoMode?.allow)
+  const denySplit = splitDefaults(autoMode?.soft_deny)
+  const envSplit = splitDefaults(autoMode?.environment)
+
+  // Built-ins are included when:
+  //   - the user provided NO list (preserves prior default-on behavior), OR
+  //   - the user explicitly opted in via "$defaults".
+  // A non-empty list without the sentinel REPLACES the built-ins.
+  const includeAllowDefaults = !allowSplit.hadAny || allowSplit.keepDefault
+  const includeDenyDefaults = !denySplit.hadAny || denySplit.keepDefault
+
   const allowDescriptions = [
-    ...(includeBashPromptRules ? getBashPromptAllowDescriptions(context) : []),
-    ...(autoMode?.allow ?? []),
+    ...(includeBashPromptRules && includeAllowDefaults
+      ? getBashPromptAllowDescriptions(context)
+      : []),
+    ...allowSplit.userRules,
   ]
   const denyDescriptions = [
-    ...(includeBashPromptRules ? getBashPromptDenyDescriptions(context) : []),
-    ...(includePowerShellGuidance ? POWERSHELL_DENY_GUIDANCE : []),
-    ...(autoMode?.soft_deny ?? []),
+    ...(includeBashPromptRules && includeDenyDefaults
+      ? getBashPromptDenyDescriptions(context)
+      : []),
+    ...(includePowerShellGuidance && includeDenyDefaults
+      ? POWERSHELL_DENY_GUIDANCE
+      : []),
+    ...denySplit.userRules,
   ]
 
   // All three sections use the same <foo_to_replace>...</foo_to_replace>
@@ -513,15 +547,19 @@ export async function buildYoloSystemPrompt(
   // tags, so user-provided values REPLACE the defaults entirely. The
   // anthropic template keeps its defaults outside the tags and uses an empty
   // tag pair at the end of each section, so user-provided values are
-  // strictly ADDITIVE.
+  // strictly ADDITIVE. The $defaults sentinel above adjusts what *we* feed
+  // in; the template-level replace/additive split is unchanged.
   const userAllow = allowDescriptions.length
     ? allowDescriptions.map(d => `- ${d}`).join('\n')
     : undefined
   const userDeny = denyDescriptions.length
     ? denyDescriptions.map(d => `- ${d}`).join('\n')
     : undefined
-  const userEnvironment = autoMode?.environment?.length
-    ? autoMode.environment.map(e => `- ${e}`).join('\n')
+  // Environment has no built-in list to merge with (the template carries the
+  // defaults inline). We still strip $defaults so users can include it as a
+  // hint without it leaking into the prompt as a literal entry.
+  const userEnvironment = envSplit.userRules.length
+    ? envSplit.userRules.map(e => `- ${e}`).join('\n')
     : undefined
 
   return systemPrompt

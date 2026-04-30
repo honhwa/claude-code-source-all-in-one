@@ -161,6 +161,9 @@ export const SAFE_ENV_VARS = new Set([
   'DISABLE_ERROR_REPORTING',
   'DISABLE_FEEDBACK_COMMAND',
   'DISABLE_TELEMETRY',
+  // Upstream 2.1.118: stricter than DISABLE_AUTOUPDATER — also blocks the
+  // manual `claude update` path, not just background auto-update.
+  'DISABLE_UPDATES',
   'ENABLE_TOOL_SEARCH',
   'MAX_MCP_OUTPUT_TOKENS',
   'MAX_THINKING_TOKENS',

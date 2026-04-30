@@ -1017,6 +1017,17 @@ export const SettingsSchema = lazySchema(() =>
             'fails (fail-closed). Intended for managed deployments where ' +
             'stale cached policy is unacceptable. Default: false.',
         ),
+      wslInheritsWindowsSettings: z
+        .boolean()
+        .optional()
+        .describe(
+          'Policy setting (managed-settings.json only): when true, a Claude ' +
+            'Code session running inside WSL inherits managed settings from ' +
+            'the Windows-side managed-settings.json. Lets a single Windows ' +
+            'managed deployment cover both native Windows and WSL sessions ' +
+            "without duplicating the policy file in each distro's filesystem. " +
+            'Default: false.',
+        ),
       skipDangerousModePermissionPrompt: z
         .boolean()
         .optional()
@@ -1042,11 +1053,20 @@ export const SettingsSchema = lazySchema(() =>
                 allow: z
                   .array(z.string())
                   .optional()
-                  .describe('Rules for the auto mode classifier allow section'),
+                  .describe(
+                    'Rules for the auto mode classifier allow section. ' +
+                      'Include the literal "$defaults" entry to keep the ' +
+                      'built-in allow rules alongside your custom ones; ' +
+                      'omitting it replaces the built-in list (upstream 2.1.118).',
+                  ),
                 soft_deny: z
                   .array(z.string())
                   .optional()
-                  .describe('Rules for the auto mode classifier deny section'),
+                  .describe(
+                    'Rules for the auto mode classifier deny section. ' +
+                      'Include "$defaults" to merge with the built-in deny list ' +
+                      'instead of replacing it (upstream 2.1.118).',
+                  ),
                 ...(process.env.USER_TYPE === 'ant'
                   ? {
                       // Back-compat alias for ant users; external users use soft_deny
@@ -1057,7 +1077,9 @@ export const SettingsSchema = lazySchema(() =>
                   .array(z.string())
                   .optional()
                   .describe(
-                    'Entries for the auto mode classifier environment section',
+                    'Entries for the auto mode classifier environment section. ' +
+                      'Include "$defaults" to merge with the built-in environment ' +
+                      'entries instead of replacing them (upstream 2.1.118).',
                   ),
               })
               .optional()

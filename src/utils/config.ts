@@ -1736,6 +1736,13 @@ export function getAutoUpdaterDisabledReason(): AutoUpdaterDisabledReason | null
   if (process.env.NODE_ENV === 'development') {
     return { type: 'development' }
   }
+  // Upstream 2.1.118: DISABLE_UPDATES is the stricter superset of
+  // DISABLE_AUTOUPDATER — it also blocks manual `claude update`. For the
+  // background-update gate we only need either flag to be present, so check
+  // it first and surface its name in the disabled reason for /doctor.
+  if (isEnvTruthy(process.env.DISABLE_UPDATES)) {
+    return { type: 'env', envVar: 'DISABLE_UPDATES' }
+  }
   if (isEnvTruthy(process.env.DISABLE_AUTOUPDATER)) {
     return { type: 'env', envVar: 'DISABLE_AUTOUPDATER' }
   }
@@ -1752,6 +1759,21 @@ export function getAutoUpdaterDisabledReason(): AutoUpdaterDisabledReason | null
     return { type: 'config' }
   }
   return null
+}
+
+/**
+ * Upstream 2.1.118: stricter gate that also covers manual `claude update`.
+ * `DISABLE_AUTOUPDATER` only stops the background auto-update path; users
+ * could still trigger a manual update. `DISABLE_UPDATES` blocks both.
+ *
+ * Manual update commands (when present in the build) should consult this
+ * helper, not `isAutoUpdaterDisabled()`. Returns true ONLY for explicit
+ * `DISABLE_UPDATES`; the broader `isAutoUpdaterDisabled()` covers more cases
+ * (development build, config-disable, telemetry-only mode) that should not
+ * block a manual update.
+ */
+export function areManualUpdatesDisabled(): boolean {
+  return isEnvTruthy(process.env.DISABLE_UPDATES)
 }
 
 export function getOrCreateUserID(): string {
