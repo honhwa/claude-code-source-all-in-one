@@ -56,6 +56,36 @@ import {
 import { getSessionsSinceLastShown } from './tipHistory.js'
 import type { Tip, TipContext } from './types.js'
 
+// Upstream 2.1.120: probe whether any user-defined or plugin-shipped agents
+// exist for the current cwd. Cached for the session so repeated tip-relevance
+// passes don't re-walk the agents dir. A change mid-session (user adds a new
+// agent file) won't flip the tip back on, but that's acceptable — tips are
+// best-effort UI. Falls back to "no agents" on probe failure so the original
+// numStartups-only gate kicks in.
+let _userHasAgentsCache: boolean | undefined
+async function userHasCustomOrPluginAgents(): Promise<boolean> {
+  if (_userHasAgentsCache !== undefined) return _userHasAgentsCache
+  try {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const agentsModule =
+      require('../../tools/AgentTool/loadAgentsDir.js') as typeof import('../../tools/AgentTool/loadAgentsDir.js')
+    const { getOriginalCwd } =
+      require('../../bootstrap/state.js') as typeof import('../../bootstrap/state.js')
+    /* eslint-enable @typescript-eslint/no-require-imports */
+    const result =
+      await agentsModule.getAgentDefinitionsWithOverrides(getOriginalCwd())
+    const has = result.activeAgents.some(
+      (a: import('../../tools/AgentTool/loadAgentsDir.js').AgentDefinition) =>
+        agentsModule.isCustomAgent(a) || agentsModule.isPluginAgent(a),
+    )
+    _userHasAgentsCache = has
+    return has
+  } catch {
+    _userHasAgentsCache = false
+    return false
+  }
+}
+
 let _isOfficialMarketplaceInstalledCache: boolean | undefined
 async function isOfficialMarketplaceInstalled(): Promise<boolean> {
   if (_isOfficialMarketplaceInstalledCache !== undefined) {
@@ -421,7 +451,13 @@ const externalTips: Tip[] = [
     cooldownSessions: 15,
     async isRelevant() {
       const config = getGlobalConfig()
-      return config.numStartups > 5
+      if (config.numStartups <= 5) return false
+      // Upstream 2.1.120: hide tips that recommend creating agents when the
+      // user already has custom or plugin agents configured. Probe is
+      // best-effort — agent loading reads disk; on any error fall through
+      // to the original "show after 5 startups" behavior so we err on the
+      // side of showing the tip rather than swallowing it silently.
+      return !(await userHasCustomOrPluginAgents())
     },
   },
   {
@@ -431,7 +467,12 @@ const externalTips: Tip[] = [
     cooldownSessions: 15,
     async isRelevant() {
       const config = getGlobalConfig()
-      return config.numStartups > 5
+      if (config.numStartups <= 5) return false
+      // Upstream 2.1.120: same gate as 'custom-agents' — once the user has
+      // agents, the --agent flag tip is more useful, so we keep showing
+      // it. If they have NO agents yet, this CLI-flag tip is wasted real
+      // estate compared to the 'custom-agents' tip; suppress it too.
+      return !(await userHasCustomOrPluginAgents())
     },
   },
   {

@@ -83,12 +83,22 @@ export function subprocessEnv(): NodeJS.ProcessEnv {
   // CCR containers.
   const proxyEnv = _getUpstreamProxyEnv?.() ?? {}
 
+  // Upstream 2.1.120: identify Claude-spawned subprocesses to env-aware CLIs.
+  // `gh` (and other tools that key on AI_AGENT) attribute traffic correctly
+  // when this is set; absence isn't an error, but with it set the GitHub
+  // backend can distinguish Claude Code traffic from human-driven `gh`. Use
+  // 'claude_code' verbatim — this is the documented value upstream agreed
+  // with the gh team. Don't override if the user already set AI_AGENT (e.g.
+  // running Claude Code from inside a wrapper that wants its own attribution).
+  const agentAttribution: NodeJS.ProcessEnv = process.env.AI_AGENT
+    ? {}
+    : { AI_AGENT: 'claude_code' }
+
   if (!isEnvTruthy(process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB)) {
-    return Object.keys(proxyEnv).length > 0
-      ? { ...process.env, ...proxyEnv }
-      : process.env
+    const merged = { ...process.env, ...proxyEnv, ...agentAttribution }
+    return merged
   }
-  const env = { ...process.env, ...proxyEnv }
+  const env = { ...process.env, ...proxyEnv, ...agentAttribution }
   for (const k of GHA_SUBPROCESS_SCRUB) {
     delete env[k]
     // GitHub Actions auto-creates INPUT_<NAME> for `with:` inputs, duplicating

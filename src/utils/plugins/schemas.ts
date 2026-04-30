@@ -883,6 +883,16 @@ const PluginManifestSettingsSchema = lazySchema(() =>
  */
 export const PluginManifestSchema = lazySchema(() =>
   z.object({
+    // Upstream 2.1.120: top-level `$schema` lets editors hook up
+    // JSON-schema validation/autocomplete in plugin.json. Validator
+    // already passed unknown top-level fields through silently, but
+    // explicit acceptance keeps `claude plugin validate` quiet.
+    $schema: z
+      .string()
+      .optional()
+      .describe(
+        'JSON Schema reference for plugin.json — purely a hint for editors',
+      ),
     ...PluginManifestMetadataSchema().shape,
     ...PluginManifestHooksSchema().partial().shape,
     ...PluginManifestCommandsSchema().partial().shape,
@@ -1292,6 +1302,30 @@ export const PluginMarketplaceEntrySchema = lazySchema(() =>
  */
 export const PluginMarketplaceSchema = lazySchema(() =>
   z.object({
+    // Upstream 2.1.120: `$schema`, `version`, and `description` are now
+    // accepted at the top level of marketplace.json. They mirror the
+    // existing nested `metadata.version` / `metadata.description` fields
+    // (kept for back-compat); when both are set the top-level value is
+    // canonical and readers should prefer it. `$schema` is purely a hint
+    // for editors and is otherwise ignored at runtime.
+    $schema: z
+      .string()
+      .optional()
+      .describe(
+        'JSON Schema reference for marketplace.json \u2014 purely a hint for editors',
+      ),
+    version: z
+      .string()
+      .optional()
+      .describe(
+        'Marketplace version (preferred over metadata.version when both are set)',
+      ),
+    description: z
+      .string()
+      .optional()
+      .describe(
+        'Marketplace description (preferred over metadata.description when both are set)',
+      ),
     name: MarketplaceNameSchema(),
     owner: PluginAuthorSchema().describe(
       'Marketplace maintainer or curator information',

@@ -2,6 +2,37 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.120 — April 28, 2026
+
+Applies the user-facing, tractable subset of the upstream 2.1.120 changelog.
+
+### Applied in this local source tree
+
+- **Set `AI_AGENT=claude_code` for spawned subprocesses** — env-aware CLIs like `gh` use this to attribute traffic. Injected in `subprocessEnv()` (the helper that backs every Bash/Shell tool spawn) so it applies on both the GHA-scrub and non-scrub paths. Doesn't override an existing `AI_AGENT` so wrapper tooling can keep its own attribution (`src/utils/subprocessEnv.ts`).
+- **Skills can now reference `${CLAUDE_EFFORT}`** — expansion is wired into `loadSkillsDir.getPromptForCommand()` after the existing `${CLAUDE_SKILL_DIR}` / `${CLAUDE_SESSION_ID}` substitutions. Resolves to the displayed effort level for the current model (e.g. "high", "medium", "max"), honoring `/effort` changes mid-session. Falls back to empty string if effort resolution fails so the model never sees a literal `${CLAUDE_EFFORT}` (`src/skills/loadSkillsDir.ts`).
+- **`claude plugin validate` now accepts `$schema`, `version`, and `description` at the top level of `marketplace.json`, and `$schema` in `plugin.json`** — added to `PluginManifestSchema` and `PluginMarketplaceSchema`. Top-level `version`/`description` in `marketplace.json` are documented as preferred over the existing nested `metadata.version` / `metadata.description` (which stay for back-compat). `$schema` is purely an editor hint and ignored at runtime (`src/utils/plugins/schemas.ts`).
+- **Spinner tips that recommend creating agents are hidden once the user has agents** — `custom-agents` and `agent-flag` tip `isRelevant` now consults a session-cached `userHasCustomOrPluginAgents()` probe that walks the agents directory via `getAgentDefinitionsWithOverrides()`. Probe failure falls back to the original numStartups-only gate so we err toward showing rather than silently swallowing the tip (`src/services/tips/tipRegistry.ts`).
+- **Bumped local source version to `2.1.120`** (from `2.1.119`) — `package.json` and `preload.ts` MACRO.
+
+### Not applied (upstream-only or out of scope)
+
+- Windows: PowerShell fallback when Git Bash is absent — shell selection internals around `getCurrentShell()` interact with the Bash tool's command parser; the local mirror's PowerShell path is incomplete enough that auto-fallback would silently break Bash auto-approval. Document and skip.
+- `claude ultrareview [target]` non-interactive subcommand — `/ultrareview` is the cloud multi-agent review feature; the non-interactive subcommand wraps that backend.
+- "Use PgUp/PgDn to scroll" hint when terminal sends arrow keys instead of scroll events — Ink keypress + scroll-detection internals.
+- Faster session start with many unauthorized claude.ai connectors — MCP startup orchestrator in obfuscated source.
+- Auto-mode denial-message link to configuration docs — UI string, but the message construction lives in obfuscated permission code.
+- Auto-compact lowercase "auto" without token count — `TokenWarning.tsx` label rework; cosmetic and easy to mis-render in non-fullscreen mode without the upstream layout fix.
+- DISABLE_TELEMETRY / CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC suppression of usage metrics for API/enterprise — this mirror's `isTelemetryDisabled()` already gates both Datadog and 1P paths via `getPrivacyLevel()`; the upstream regression doesn't manifest here, so no fix needed.
+- Fixed Esc during stdio MCP tool call closing the entire server connection (regression in 2.1.105) — MCP stdio client lifecycle in obfuscated source.
+- Fixed `/rewind` and other interactive overlays not responding after `claude --resume` — overlay focus management in Ink-internal code.
+- Fixed terminal scrollback duplication in non-fullscreen mode — Ink/TUI scroll bookkeeping.
+- Fixed false-positive "Dangerous rm operation" prompts in auto mode for multi-line bash with both pipe and redirect — `pathValidation.ts` multi-statement pipe+redirect parsing edge case.
+- Fixed long selection menus clipping below terminal in fullscreen + Write tool "+N lines" expand collapse + slash-command picker jumping/contiguous-substring highlight + `/plugin marketplace` unrecognized-source-format handling — Ink/TUI internals.
+- VSCode `/usage` native dialog opening + voice dictation language setting — VSCode integration not in this mirror.
+- Bash `find` exhausting open file descriptors on large trees — Bash tool internals; native macOS/Linux build only.
+
+---
+
 ## 2.1.119 — April 23, 2026
 
 Applies the user-facing, tractable subset of the upstream 2.1.119 changelog (same-day double-release with 2.1.118).

@@ -368,6 +368,34 @@ export function createSkillCommand({
         getSessionId(),
       )
 
+      // Upstream 2.1.120: ${CLAUDE_EFFORT} expands to the displayed effort
+      // level for the current model (e.g. "high", "medium"). Lets a skill's
+      // content adapt — for example, a /verify skill might run a fuller
+      // checklist on "max" than on "low". Resolved at expansion time, not
+      // skill-load time, so /effort changes mid-session are picked up.
+      if (/\$\{CLAUDE_EFFORT\}/.test(finalContent)) {
+        try {
+          /* eslint-disable @typescript-eslint/no-require-imports */
+          const { getDisplayedEffortLevel } =
+            require('../utils/effort.js') as typeof import('../utils/effort.js')
+          /* eslint-enable @typescript-eslint/no-require-imports */
+          const appState = toolUseContext.getAppState()
+          const effortLevel = getDisplayedEffortLevel(
+            appState.mainLoopModel ?? '',
+            appState.effortValue,
+          )
+          finalContent = finalContent.replace(
+            /\$\{CLAUDE_EFFORT\}/g,
+            effortLevel,
+          )
+        } catch {
+          // Effort resolution is best-effort: a malformed model id or missing
+          // app state shouldn't kill the skill expansion. Strip the marker so
+          // the model never sees a literal ${CLAUDE_EFFORT}.
+          finalContent = finalContent.replace(/\$\{CLAUDE_EFFORT\}/g, '')
+        }
+      }
+
       // Security: MCP skills are remote and untrusted — never execute inline
       // shell commands (!`…` / ```! … ```) from their markdown body.
       // ${CLAUDE_SKILL_DIR} is meaningless for MCP skills anyway.
