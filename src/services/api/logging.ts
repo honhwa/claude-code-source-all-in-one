@@ -774,6 +774,11 @@ export function logAPISuccessAndDuration({
     ttftMs: ttftMs ?? undefined,
     requestSetupMs,
     attemptStartTimes,
+    // Upstream 2.1.121: thread the API stop_reason into the span end-attrs
+    // so dashboards can break down LLM completions by end_turn vs
+    // max_tokens vs tool_use vs stop_sequence. logAPISuccess already
+    // receives stopReason from the streaming response handler.
+    stopReason: stopReason ?? undefined,
   })
 
   // Log first successful message for teleported sessions (reliability tracking)

@@ -374,6 +374,14 @@ export function endLLMRequestSpan(
     requestSetupMs?: number
     /** Timestamps (Date.now()) of each attempt start — used to emit retry sub-spans */
     attemptStartTimes?: number[]
+    /**
+     * Upstream 2.1.121: Anthropic-format stop reason from the API response
+     * (e.g. 'end_turn', 'max_tokens', 'stop_sequence', 'tool_use'). Emitted
+     * as both `stop_reason` (legacy) and `gen_ai.response.finish_reasons`
+     * (OpenTelemetry GenAI semantic convention) on the span so dashboards
+     * keyed on either name pick it up.
+     */
+    stopReason?: string
   },
 ): void {
   let llmSpanContext: SpanContext | undefined
@@ -450,6 +458,17 @@ export function endLLMRequestSpan(
       endAttributes['response.has_tool_call'] = metadata.hasToolCall
     if (metadata.ttftMs !== undefined)
       endAttributes['ttft_ms'] = metadata.ttftMs
+    // Upstream 2.1.121: surface the API stop reason on every LLM span. Emit
+    // under both the legacy attribute name and the OTel GenAI semantic name
+    // so existing dashboards keep working AND new ones (built against the
+    // GenAI semconv) pick it up. finish_reasons is conventionally an array
+    // of strings — we always emit a single value but keep the [] form.
+    if (metadata.stopReason !== undefined) {
+      endAttributes['stop_reason'] = metadata.stopReason
+      endAttributes['gen_ai.response.finish_reasons'] = JSON.stringify([
+        metadata.stopReason,
+      ])
+    }
 
     // Add experimental response attributes (model_output, thinking_output)
     addBetaLLMResponseAttributes(endAttributes, metadata)

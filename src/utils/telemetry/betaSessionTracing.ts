@@ -263,6 +263,17 @@ export function addBetaLLMRequestAttributes(
     span.setAttribute('system_prompt_preview', preview)
     span.setAttribute('system_prompt_length', newContext.systemPrompt.length)
 
+    // Upstream 2.1.121: also surface the full system prompt as
+    // `user_system_prompt` on the span when OTEL_LOG_USER_PROMPTS is
+    // explicitly opted in. Distinct from the existing
+    // `system_prompt_preview` (always-on, capped at 500 chars) and the
+    // `system_prompt` event (logged once per unique hash) — this carries
+    // the full prompt on every span so downstream tools can correlate
+    // requests with their exact system prompt without re-hashing.
+    if (process.env.OTEL_LOG_USER_PROMPTS === 'true') {
+      span.setAttribute('user_system_prompt', newContext.systemPrompt)
+    }
+
     // Log the full system prompt only once per unique hash this session
     if (!seenHashes.has(promptHash)) {
       seenHashes.add(promptHash)

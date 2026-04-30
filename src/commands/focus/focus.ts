@@ -1,4 +1,5 @@
 import type { LocalCommandCall } from '../../types/command.js'
+import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js'
 
 function parseMode(raw: string): 'on' | 'off' | 'toggle' | null {
   const s = raw.trim().toLowerCase()
@@ -14,6 +15,19 @@ export const call: LocalCommandCall = async (args, context) => {
     return {
       type: 'text',
       value: `Unknown argument "${args?.trim() ?? ''}". Use /focus, /focus on, or /focus off.`,
+    }
+  }
+
+  // Upstream 2.1.121: focus view depends on the fullscreen renderer for the
+  // transcript-filter overlay to actually show. When fullscreen is off,
+  // toggling the flag silently does nothing — instead, explain how to
+  // enable it. Mirrors the upstream "Fixed /focus showing 'Unknown command'
+  // when the fullscreen renderer is off" entry.
+  if (!isFullscreenEnvEnabled()) {
+    return {
+      type: 'text',
+      value:
+        'Focus view requires fullscreen rendering. Run /tui fullscreen (or set CLAUDE_CODE_NO_FLICKER=1 and restart) to enable it, then try /focus again.',
     }
   }
 

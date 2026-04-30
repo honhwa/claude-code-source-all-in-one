@@ -856,6 +856,10 @@ export const PostToolUseHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('PostToolUse'),
     additionalContext: z.string().optional(),
+    // Upstream 2.1.121: tool-output replacement now applies to all tools,
+    // not just MCP. New field is `updatedToolOutput`; `updatedMCPToolOutput`
+    // remains as a back-compat alias.
+    updatedToolOutput: z.unknown().optional(),
     updatedMCPToolOutput: z.unknown().optional(),
   }),
 )

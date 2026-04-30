@@ -1513,9 +1513,11 @@ async function checkPermissionsAndCallTool(
       durationMs,
     )) {
       if ('updatedMCPToolOutput' in hookResult) {
-        if (isMcpTool(tool)) {
-          toolOutput = hookResult.updatedMCPToolOutput
-        }
+        // Upstream 2.1.121: PostToolUse hooks can replace tool output for
+        // all tools, not just MCP. Lift the isMcpTool gate; the variable
+        // still carries the legacy name in this hot path to avoid touching
+        // the entire pipe, but it now applies to Bash/File/Web/etc.
+        toolOutput = hookResult.updatedMCPToolOutput
       } else if (isMcpTool(tool)) {
         hookResults.push(hookResult)
         if (hookResult.message.type === 'attachment') {

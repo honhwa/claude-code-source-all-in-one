@@ -1799,7 +1799,15 @@ export const fetchToolsForClient = memoizeWithLRU(
                     .replace(/\s+/g, ' ')
                     .trim() || undefined
                 : undefined,
-            alwaysLoad: tool._meta?.['anthropic/alwaysLoad'] === true,
+            // Upstream 2.1.121: also honor server-level `alwaysLoad: true` in
+            // the user's MCP server config — a per-server opt-out from
+            // tool-search deferral that doesn't require touching the MCP
+            // server itself. Per-tool `_meta['anthropic/alwaysLoad']` still
+            // wins (servers can mark individual tools), and the server-level
+            // flag fills in for tools that don't carry per-tool meta.
+            alwaysLoad:
+              tool._meta?.['anthropic/alwaysLoad'] === true ||
+              ('alwaysLoad' in client.config && client.config.alwaysLoad === true),
             // Per-tool result persistence override: an MCP server can
             // annotate a tool that legitimately returns large payloads
             // (e.g. a DB-schema tool) with _meta['anthropic/maxResultSizeChars']

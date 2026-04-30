@@ -148,8 +148,14 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
           }
         }
 
-        // If hooks provided updatedMCPToolOutput, yield it if this is an MCP tool
-        if (result.updatedMCPToolOutput && isMcpTool(tool)) {
+        // Upstream 2.1.121: hookSpecificOutput.updatedToolOutput now applies
+        // to all tools, not just MCP. Hooks can rewrite Bash/File/Web tool
+        // output before the model sees it (e.g. to redact secrets, attach
+        // a synthesized summary, or normalize a noisy diagnostic). Field is
+        // still surfaced to the executor as `updatedMCPToolOutput` for now —
+        // the back-compat alias keeps the existing yield-shape and downstream
+        // typing while removing the isMcpTool gate.
+        if (result.updatedMCPToolOutput) {
           toolOutput = result.updatedMCPToolOutput as Output
           yield {
             updatedMCPToolOutput: toolOutput,

@@ -25,12 +25,29 @@ export const TransportSchema = lazySchema(() =>
 )
 export type Transport = z.infer<ReturnType<typeof TransportSchema>>
 
+// Upstream 2.1.121: `alwaysLoad` opts a server's tools out of tool-search
+// deferral so they are always present in the model's tool list. Useful for
+// tightly-scoped servers (e.g. a project-specific tool) that the model needs
+// to discover without a ToolSearch round-trip. Optional + defaults to
+// undefined → ToolSearch deferral logic uses its existing defaults. Lives
+// at the server level (not per-tool) and applies to all tools the server
+// advertises.
+const AlwaysLoadField = {
+  alwaysLoad: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true, all tools from this MCP server skip tool-search deferral and are always available to the model.',
+    ),
+}
+
 export const McpStdioServerConfigSchema = lazySchema(() =>
   z.object({
     type: z.literal('stdio').optional(), // Optional for backwards compatibility
     command: z.string().min(1, 'Command cannot be empty'),
     args: z.array(z.string()).default([]),
     env: z.record(z.string(), z.string()).optional(),
+    ...AlwaysLoadField,
   }),
 )
 
@@ -62,6 +79,7 @@ export const McpSSEServerConfigSchema = lazySchema(() =>
     headers: z.record(z.string(), z.string()).optional(),
     headersHelper: z.string().optional(),
     oauth: McpOAuthConfigSchema().optional(),
+    ...AlwaysLoadField,
   }),
 )
 
@@ -93,6 +111,7 @@ export const McpHTTPServerConfigSchema = lazySchema(() =>
     headers: z.record(z.string(), z.string()).optional(),
     headersHelper: z.string().optional(),
     oauth: McpOAuthConfigSchema().optional(),
+    ...AlwaysLoadField,
   }),
 )
 
@@ -102,6 +121,7 @@ export const McpWebSocketServerConfigSchema = lazySchema(() =>
     url: z.string(),
     headers: z.record(z.string(), z.string()).optional(),
     headersHelper: z.string().optional(),
+    ...AlwaysLoadField,
   }),
 )
 

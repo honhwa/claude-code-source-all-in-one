@@ -661,8 +661,15 @@ function processHookJSONOutput({
         break
       case 'PostToolUse':
         result.additionalContext = json.hookSpecificOutput.additionalContext
-        // Extract updatedMCPToolOutput if provided
-        if (json.hookSpecificOutput.updatedMCPToolOutput) {
+        // Upstream 2.1.121: hooks can also use the new
+        // hookSpecificOutput.updatedToolOutput key (works for all tools, not
+        // just MCP). Older hooks still send updatedMCPToolOutput and that
+        // continues to work as a back-compat alias. The new key wins when
+        // both are set so a hook can deliberately switch over.
+        if (json.hookSpecificOutput.updatedToolOutput !== undefined) {
+          result.updatedMCPToolOutput =
+            json.hookSpecificOutput.updatedToolOutput
+        } else if (json.hookSpecificOutput.updatedMCPToolOutput !== undefined) {
           result.updatedMCPToolOutput =
             json.hookSpecificOutput.updatedMCPToolOutput
         }

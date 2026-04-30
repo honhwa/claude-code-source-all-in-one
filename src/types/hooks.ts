@@ -107,9 +107,19 @@ export const syncHookResponseSchema = lazySchema(() =>
         z.object({
           hookEventName: z.literal('PostToolUse'),
           additionalContext: z.string().optional(),
+          // Upstream 2.1.121: rename + lift the MCP-only restriction. The
+          // new field is `updatedToolOutput` and applies to every tool;
+          // `updatedMCPToolOutput` stays accepted as a back-compat alias so
+          // hooks written for older versions keep working.
+          updatedToolOutput: z
+            .unknown()
+            .describe('Replaces the tool output (works for all tools)')
+            .optional(),
           updatedMCPToolOutput: z
             .unknown()
-            .describe('Updates the output for MCP tools')
+            .describe(
+              'DEPRECATED — back-compat alias for updatedToolOutput. Prefer the new key.',
+            )
             .optional(),
         }),
         z.object({

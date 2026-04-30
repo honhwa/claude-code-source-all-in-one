@@ -2,6 +2,38 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.121 — April 28, 2026
+
+Applies the user-facing, tractable subset of the upstream 2.1.121 changelog (same-day double-release with 2.1.120).
+
+### Applied in this local source tree
+
+- **Added `alwaysLoad` to MCP server config** — when set on a server entry in settings.json / .mcp.json, every tool that server advertises skips tool-search deferral and is always available to the model. Schema added to all four user-configurable transport variants (stdio, sse, http, ws). Wired into `client.ts:1802` so the per-server flag is OR-merged with the existing per-tool `_meta['anthropic/alwaysLoad']` (per-tool still wins; server flag fills in for tools without per-tool meta) (`src/services/mcp/types.ts`, `src/services/mcp/client.ts`).
+- **PostToolUse hooks can replace tool output for all tools, not just MCP** — added `hookSpecificOutput.updatedToolOutput` (works for every tool) alongside the legacy `updatedMCPToolOutput` (kept as a back-compat alias). When both are set, the new key wins. Lifted the `isMcpTool` gate in `runPostToolUseHooks` and `toolExecution.ts` so the replacement applies to Bash/File/Web/etc. The variable still carries the legacy name through the executor pipeline to avoid touching the entire chain (`src/types/hooks.ts`, `src/utils/hooks.ts`, `src/services/tools/toolHooks.ts`, `src/services/tools/toolExecution.ts`, `src/entrypoints/sdk/coreSchemas.ts`).
+- **`--dangerously-skip-permissions` no longer prompts for writes to `.claude/skills/`, `.claude/agents/`, `.claude/commands/`** — added `isAuthorAssetPath()` helper and a carve-out at step 1g of `hasPermissionsToUseToolInner`. When in `bypassPermissions` mode (or plan mode with bypass available) and the write target matches one of the three author-asset directories, the existing `safetyCheck` ask falls through to step 2a's bypass branch. `settings.json`, `hooks/`, and other `.claude/` contents stay safetyCheck-immune — only those three asset directories are carved out (`src/utils/permissions/permissions.ts`).
+- **`/focus` now explains how to enable fullscreen instead of silently no-opping** — when `isFullscreenEnvEnabled()` returns false, `/focus` prints "Focus view requires fullscreen rendering. Run /tui fullscreen…" rather than toggling state that has no visible effect. Mirrors the upstream "Fixed /focus showing 'Unknown command' when the fullscreen renderer is off" fix (`src/commands/focus/focus.ts`).
+- **OTEL LLM request spans now carry `stop_reason`, `gen_ai.response.finish_reasons`, and (gated) `user_system_prompt`** — added optional `stopReason` to the `endLLMRequestSpan()` metadata; emits both the legacy attribute name and the OTel GenAI semconv `gen_ai.response.finish_reasons` (always emitted as a single-element JSON array of strings). `logAPISuccess` already received `stopReason` from the streaming response handler, now it threads through. `user_system_prompt` is set on the request span when `OTEL_LOG_USER_PROMPTS=true`, distinct from the existing 500-char `system_prompt_preview` and the de-duplicated `system_prompt` log event (`src/utils/telemetry/sessionTracing.ts`, `src/utils/telemetry/betaSessionTracing.ts`, `src/services/api/logging.ts`).
+- **Bumped local source version to `2.1.121`** (from `2.1.120`) — `package.json` and `preload.ts` MACRO.
+
+### Not applied (upstream-only or out of scope)
+
+- `claude plugin prune` + `plugin uninstall --prune` cascade — plugin CLI subcommand wiring + dependency-graph walker.
+- Type-to-filter search box in `/skills` — Ink list/filter UI in obfuscated source.
+- Fullscreen prompt scroll preservation when typing; dialogs scrollable via arrow / PgUp / PgDn / mouse wheel; long-URL wrap click open — Ink/scroll internals.
+- SDK + `claude -p`: `CLAUDE_CODE_FORK_SUBAGENT=1` lifting the interactive-only restriction — fork subagent gate at `src/tools/AgentTool/forkSubagent.ts:35` references `getIsNonInteractiveSession()`; the upstream change drops that branch but our local print/SDK plumbing depends on the branch elsewhere, so the change isn't safe to land in isolation.
+- `/terminal-setup` enabling iTerm2 "Applications in terminal may access clipboard" — terminal-setup script in obfuscated source.
+- MCP servers retry up to 3 times on transient startup errors — MCP client startup orchestrator.
+- Terminal tab title generated in configured language — terminal-title hook.
+- Claude.ai connectors deduplicated by upstream URL — connector list resolver.
+- Vertex AI X.509 / mTLS ADC support — Vertex auth path.
+- Faster startup: remove Recent Activity panel from release-notes splash — splash UI.
+- LSP diagnostic summary expand-on-click + expand hint — LSP diagnostic renderer.
+- SDK `mcp_authenticate` `redirectUri` for custom-scheme completion — SDK auth handler.
+- VSCode voice dictation language fallback + `/context` native dialog — VSCode integration.
+- Memory leak fixes (image processing RSS, `/usage` 2GB, long-running tool no-progress); Bash unusable when start dir deleted; `--resume` external-build crash + corrupt-line skip; Bedrock Opus 4.7 `thinking.type.enabled`; Microsoft 365 MCP OAuth duplicate prompt; Ctrl+L scrollback duplication on tmux/GNOME/Windows Terminal/Konsole; Claude.ai connector silent-disappearance on auth blip; remote-session "Always allow" persistence; managed-settings `NO_PROXY` propagation; managed-settings approval prompt exit-on-accept; `/usage` rate-limited stale-token refresh; legacy enum invalidating settings.json; `/usage` no-flicker clipping; embedded grep/find/rg deleted-binary fallback; native `find` peak fd usage — internals/native-build patches.
+
+---
+
 ## 2.1.120 — April 28, 2026
 
 Applies the user-facing, tractable subset of the upstream 2.1.120 changelog.
