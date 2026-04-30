@@ -6,6 +6,8 @@ export const MODEL_ALIASES = [
   'sonnet[1m]',
   'opus[1m]',
   'opusplan',
+  'gpt5.5',
+  'gpt5.5-pro',
   'gpt5.4',
   'gpt5.4-mini',
   'gpt5.4-nano',

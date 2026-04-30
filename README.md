@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/anthropics/claude-code"><img src="https://img.shields.io/badge/Claude_Code-v2.1.89-6B4FBB?style=for-the-badge" alt="Claude Code v2.1.89"></a>
+  <a href="https://github.com/anthropics/claude-code"><img src="https://img.shields.io/badge/Claude_Code-v2.1.123-6B4FBB?style=for-the-badge" alt="Claude Code v2.1.123"></a>
   <a href="#license"><img src="https://img.shields.io/badge/License-Educational_Only-red?style=for-the-badge" alt="Educational Only"></a>
   <a href="#deep-analysis-series"><img src="https://img.shields.io/badge/Articles-18_Deep_Dives-blue?style=for-the-badge" alt="18 Articles"></a>
   <a href="#run-from-source"><img src="https://img.shields.io/badge/Status-Runnable-brightgreen?style=for-the-badge" alt="Runnable"></a>
@@ -160,7 +160,7 @@ We produced **18 original articles** with source-level deep dives into every maj
 
 ## Run from Source
 
-This repository supports running Claude Code locally from source (with reduced functionality). Verified working with version `2.1.89`.
+This repository supports running Claude Code locally from source (with reduced functionality). Tracks upstream releases — currently aligned with `2.1.123` (see [`CHANGELOG.md`](CHANGELOG.md)).
 
 ### Prerequisites
 
@@ -200,27 +200,35 @@ export ANTHROPIC_API_KEY="sk-ant-xxx"
 </details>
 
 <details>
-<summary><strong>Alternative: Use GPT-5.4 via ChatGPT subscription</strong></summary>
+<summary><strong>Alternative: Use GPT-5.5 via ChatGPT subscription</strong></summary>
 
-If you have a ChatGPT Plus/Pro/Team subscription, you can use GPT-5.4 as the agent model — no API key needed:
+If you have a ChatGPT Plus/Pro/Business/Enterprise subscription, you can use GPT-5.5 as the agent model — no API key needed:
 
 ```bash
 # 1. Login with your ChatGPT account (opens browser)
 ./start.sh chatgpt-login
 
-# 2. Launch with GPT-5.4
-./start.sh --model gpt5.4
+# 2. Launch with GPT-5.5
+./start.sh --model gpt5.5
 ```
 
 <p align="center">
-  <img src="assets/chatGPT-sub.png" alt="GPT-5.4 running via ChatGPT subscription" width="100%">
+  <img src="assets/chatGPT-sub.png" alt="GPT-5.5 running via ChatGPT subscription" width="100%">
   <br>
-  <em>Running GPT-5.4 via ChatGPT subscription as the agent model</em>
+  <em>Running GPT via ChatGPT subscription as the agent model</em>
 </p>
 
-Available GPT model aliases: `gpt5.4`, `gpt5.4-mini`, `gpt5.4-nano`
+Available GPT model aliases:
 
-You can also use the full format: `--model chatgpt:gpt-5.4`
+| Alias | Resolves to | Tier required |
+|:---|:---|:---|
+| `gpt5.5` | `chatgpt:gpt-5.5` | Plus / Pro / Business / Enterprise |
+| `gpt5.5-pro` | `chatgpt:gpt-5.5-pro` | Pro / Business / Enterprise |
+| `gpt5.4` | `chatgpt:gpt-5.4` | Plus / Pro / Business / Enterprise (legacy) |
+| `gpt5.4-mini` | `chatgpt:gpt-5.4-mini` | Any paid tier |
+| `gpt5.4-nano` | `chatgpt:gpt-5.4-nano` | Any paid tier |
+
+You can also use the full format: `--model chatgpt:gpt-5.5`
 
 </details>
 
@@ -229,7 +237,7 @@ You can also use the full format: `--model chatgpt:gpt-5.4`
 
 ```bash
 export OPENAI_API_KEY="sk-xxx"
-./start.sh --model openai:gpt-5.4
+./start.sh --model openai:gpt-5.5
 ```
 
 Other OpenAI-compatible providers are also supported:
@@ -240,6 +248,30 @@ export DEEPSEEK_API_KEY="sk-xxx"
 
 export MISTRAL_API_KEY="xxx"
 ./start.sh --model mistral:mistral-large-latest
+```
+
+</details>
+
+<details>
+<summary><strong>Alternative: Run a local model via Ollama (offline / no API key)</strong></summary>
+
+Run Claude Code entirely against a local Ollama model — no API key, no network calls to Anthropic or OpenAI. The launcher boots a bundled Anthropic→Ollama proxy ([`scripts/ollama-proxy.mjs`](scripts/ollama-proxy.mjs)) and points the CLI at it.
+
+```bash
+# 1. Install and start Ollama (https://ollama.com)
+ollama serve
+
+# 2. Pull a tool-capable model
+ollama pull qwen2.5-coder:7b
+
+# 3. Launch Claude Code against the local model
+./start-ollama.sh qwen2.5-coder:7b
+```
+
+For models without native tool calling, set `PROMPTED_TOOLS=1`:
+
+```bash
+PROMPTED_TOOLS=1 ./start-ollama.sh phi3:mini
 ```
 
 </details>

@@ -154,9 +154,9 @@ export function getAgentModelOptions(): AgentModelOption[] {
       description: 'Fast and efficient for simple tasks',
     },
     {
-      value: 'gpt5.4',
-      label: 'GPT-5.4',
-      description: 'OpenAI GPT-5.4 via ChatGPT subscription',
+      value: 'gpt5.5',
+      label: 'GPT-5.5',
+      description: 'OpenAI GPT-5.5 via ChatGPT subscription',
     },
     {
       value: 'inherit',

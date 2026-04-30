@@ -477,6 +477,10 @@ export function parseUserSpecifiedModel(
       case 'best':
         return getBestModel()
       // GPT model aliases -> resolve to chatgpt:model format for ChatGPT subscription
+      case 'gpt5.5':
+        return 'chatgpt:gpt-5.5'
+      case 'gpt5.5-pro':
+        return 'chatgpt:gpt-5.5-pro'
       case 'gpt5.4':
         return 'chatgpt:gpt-5.4'
       case 'gpt5.4-mini':

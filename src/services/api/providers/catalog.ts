@@ -27,6 +27,8 @@ export const PROVIDER_CATALOG: Record<string, ProviderDef> = {
     baseUrl: 'https://api.openai.com/v1',
     envKeyName: 'OPENAI_API_KEY',
     defaultModels: [
+      { id: 'gpt-5.5', label: 'GPT-5.5' },
+      { id: 'gpt-5.5-pro', label: 'GPT-5.5 Pro' },
       { id: 'gpt-5.4', label: 'GPT-5.4' },
       { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
       { id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },

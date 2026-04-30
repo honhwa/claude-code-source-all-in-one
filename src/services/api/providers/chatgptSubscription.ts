@@ -30,6 +30,8 @@ const WHAM_RESPONSES_URL = `${WHAM_BASE_URL}/responses`
 
 /** Available ChatGPT subscription models */
 export const CHATGPT_MODELS = [
+  { id: 'gpt-5.5', label: 'GPT-5.5' },
+  { id: 'gpt-5.5-pro', label: 'GPT-5.5 Pro' },
   { id: 'gpt-5.4', label: 'GPT-5.4' },
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
   { id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },
