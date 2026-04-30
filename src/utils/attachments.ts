@@ -3,6 +3,7 @@ import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
 } from 'src/services/analytics/index.js'
+import { logOTelEvent } from './telemetry/events.js'
 import {
   toolMatchesName,
   type Tools,
@@ -1976,10 +1977,23 @@ function processAgentMentions(
 
     if (!agentDef) {
       logEvent('tengu_at_mention_agent_not_found', {})
+      // Upstream 2.1.122: emit a generic OTEL at_mention event for every
+      // resolution attempt (including failures). The body in logOTelEvent
+      // becomes "claude_code.at_mention". Only the resolution outcome and
+      // mention kind are surfaced — the agent name itself is high-cardinality
+      // and may be PII for custom agents, so skip it.
+      void logOTelEvent('at_mention', {
+        kind: 'agent',
+        resolved: 'false',
+      })
       return null
     }
 
     logEvent('tengu_at_mention_agent_success', {})
+    void logOTelEvent('at_mention', {
+      kind: 'agent',
+      resolved: 'true',
+    })
 
     return {
       type: 'agent_mention' as const,

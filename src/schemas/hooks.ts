@@ -257,15 +257,62 @@ export const HookMatcherSchema = lazySchema(() =>
  * Accepts any string key so that an unrecognized hook event name in
  * settings.json doesn't cause the entire file to be rejected. Unknown
  * keys are silently stripped during parsing (upstream 2.1.101 resilience).
+ *
+ * Upstream 2.1.122 extends that resilience down to the matcher and hook
+ * level: a malformed individual matcher (or a malformed individual hook
+ * inside a matcher) no longer rejects the whole `hooks` field. Instead the
+ * bad entry is dropped and the rest of the configuration loads. We
+ * implement this by accepting `z.unknown()` at the leaf and running the
+ * strict matcher/hook schemas via `safeParse` in the transform — a single
+ * bad command no longer invalidates settings.json.
  */
 export const HooksSchema = lazySchema(() =>
   z
-    .record(z.string(), z.array(HookMatcherSchema()).optional())
+    .record(z.string(), z.array(z.unknown()).optional())
     .transform(obj => {
       const result: Partial<Record<HookEvent, HookMatcher[]>> = {}
+      const matcherSchema = HookMatcherSchema()
       for (const [key, value] of Object.entries(obj)) {
-        if ((HOOK_EVENTS as readonly string[]).includes(key) && value) {
-          result[key as HookEvent] = value
+        if (!(HOOK_EVENTS as readonly string[]).includes(key)) continue
+        if (!Array.isArray(value)) continue
+
+        const matchers: HookMatcher[] = []
+        for (const rawMatcher of value) {
+          const parsed = matcherSchema.safeParse(rawMatcher)
+          if (parsed.success) {
+            matchers.push(parsed.data)
+            continue
+          }
+          // Salvage: keep the matcher's `matcher` string and any hooks that
+          // individually validate, drop the ones that don't. Lets a settings
+          // file with one stale `mcp_tool` entry (e.g. server renamed) keep
+          // its other PostToolUse hooks live until the user fixes that one.
+          if (
+            rawMatcher &&
+            typeof rawMatcher === 'object' &&
+            'hooks' in rawMatcher &&
+            Array.isArray((rawMatcher as { hooks: unknown }).hooks)
+          ) {
+            const matcherFieldRaw = (rawMatcher as { matcher?: unknown })
+              .matcher
+            const matcherField =
+              typeof matcherFieldRaw === 'string' ? matcherFieldRaw : undefined
+            const hookCmdSchema = HookCommandSchema()
+            const validHooks: HookCommand[] = []
+            for (const h of (rawMatcher as { hooks: unknown[] }).hooks) {
+              const p = hookCmdSchema.safeParse(h)
+              if (p.success) validHooks.push(p.data)
+            }
+            if (validHooks.length > 0) {
+              matchers.push({
+                ...(matcherField !== undefined && { matcher: matcherField }),
+                hooks: validHooks,
+              } as HookMatcher)
+            }
+          }
+        }
+        if (matchers.length > 0) {
+          result[key as HookEvent] = matchers
         }
       }
       return result

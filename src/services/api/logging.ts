@@ -364,13 +364,20 @@ export function logAPIError({
     ...getAnthropicEnvMetadata(),
   })
 
-  // Log API error event for OTLP
+  // Log API error event for OTLP. Upstream 2.1.122: numeric fields are
+  // emitted as numbers (status_code/duration_ms/attempt). Status from the
+  // API logger is a string when set; parseInt yields NaN → undefined for
+  // network errors where no HTTP status was received.
+  const statusNumber =
+    status !== null && status !== undefined && status !== ''
+      ? parseInt(String(status), 10)
+      : NaN
   void logOTelEvent('api_error', {
     model: model,
     error: errStr,
-    status_code: String(status),
-    duration_ms: String(durationMs),
-    attempt: String(attempt),
+    status_code: Number.isFinite(statusNumber) ? statusNumber : undefined,
+    duration_ms: durationMs,
+    attempt,
     speed: fastMode ? 'fast' : 'normal',
   })
 
@@ -714,15 +721,16 @@ export function logAPISuccessAndDuration({
     previousRequestId,
     betas,
   })
-  // Log API request event for OTLP
+  // Log API request event for OTLP. Upstream 2.1.122: numeric fields are
+  // emitted as numbers so OTLP receivers can aggregate them as quantities.
   void logOTelEvent('api_request', {
     model,
-    input_tokens: String(usage.input_tokens),
-    output_tokens: String(usage.output_tokens),
-    cache_read_tokens: String(usage.cache_read_input_tokens),
-    cache_creation_tokens: String(usage.cache_creation_input_tokens),
-    cost_usd: String(costUSD),
-    duration_ms: String(durationMs),
+    input_tokens: usage.input_tokens,
+    output_tokens: usage.output_tokens,
+    cache_read_tokens: usage.cache_read_input_tokens,
+    cache_creation_tokens: usage.cache_creation_input_tokens,
+    cost_usd: costUSD,
+    duration_ms: durationMs,
     speed: fastMode ? 'fast' : 'normal',
   })
 

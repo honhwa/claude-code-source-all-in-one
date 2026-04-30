@@ -2,6 +2,42 @@
 
 All notable changes tracked here. This is a local/educational source mirror of Claude Code, not an official release stream.
 
+## 2.1.123 — April 29, 2026
+
+Folds in upstream `2.1.122` (April 28) + the single-fix `2.1.123` release (April 29, 2026).
+
+### Applied in this local source tree
+
+- **`ANTHROPIC_BEDROCK_SERVICE_TIER` env var** — sent as `X-Amzn-Bedrock-Service-Tier` HTTP header on every Bedrock request. Wired into the Bedrock client construction in `client.ts` next to the `AWS_BEARER_TOKEN_BEDROCK` block; trimmed and pass-through (Bedrock surfaces invalid values as 400 instead of us silently dropping a typo). Added to `SAFE_ENV_VARS` so managed deployments can set it (`src/services/api/client.ts`, `src/utils/managedEnvConstants.ts`).
+- **`!exit` / `!quit` in bash mode no longer terminates the CLI** — `handlePromptSubmit`'s exit-keyword gate now skips when `mode === 'bash'` and the input is bare `exit`/`quit`. Vim-style shortcuts (`:q`, `:wq`, etc.) stay routed to `/exit` even in bash mode since they aren't valid shell commands (`src/utils/handlePromptSubmit.ts`).
+- **`spinnerTipsOverride.excludeDefault` now suppresses defaults unconditionally** — previously the gate required `customTips.length > 0`, so a user with `excludeDefault: true` and no custom tips still saw built-in tips. The new behavior matches the setting name (`src/services/tips/tipRegistry.ts`).
+- **Malformed hooks entries no longer invalidate the entire settings.json** — `HooksSchema` now accepts the leaves as `z.unknown()` and runs `HookMatcherSchema().safeParse` per matcher inside the transform. Bad matchers are dropped; salvage path keeps a matcher's `matcher` string and any individually-valid hooks alive even when one entry inside is broken (e.g. a stale `mcp_tool` whose server was renamed) (`src/schemas/hooks.ts`).
+- **OTEL: numeric attrs on `api_request` / `api_error` are numbers** — `logOTelEvent` widened to accept `string | number | undefined` so OTLP receivers see token counts, durations, and costs as quantities instead of having to re-parse strings. `api_error` `status_code` is parsed (NaN for network errors → omitted) (`src/utils/telemetry/events.ts`, `src/services/api/logging.ts`).
+- **OTEL: new `claude_code.at_mention` event for @-mention resolution** — emitted in `processAgentMentions` alongside the existing `tengu_at_mention_*` analytics events. Carries `kind` and `resolved`; the agent name itself is high-cardinality / potentially PII so it is not surfaced. (`src/utils/attachments.ts`).
+- **Bumped local source version to `2.1.123`** (from `2.1.121`). Folds 2.1.122 + 2.1.123 in a single bump since the latter is a one-line auth fix that doesn't reproduce here.
+
+### Pre-aligned (already correct in this mirror)
+
+- **2.1.123 OAuth 401 retry loop with `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`** — the `OAUTH_BETA_HEADER` is added unconditionally for Claude.ai subscribers in `getAllModelBetas` (`src/utils/betas.ts:251-253`) and the `DISABLE_EXPERIMENTAL_BETAS` strip in `api.ts` only filters tool-schema fields, not request headers. The upstream regression doesn't manifest in this mirror.
+- **Image resize to 2000px max** — already enforced by `IMAGE_MAX_WIDTH = IMAGE_MAX_HEIGHT = 2000` in `src/constants/apiLimits.ts`. Upstream's regression to 2576px doesn't appear here.
+
+### Not applied (upstream-only or out of scope)
+
+- `/resume` search by PR URL across GitHub / GHE / GitLab / Bitbucket — session-search internals.
+- `/mcp` showing claude.ai connectors hidden by a manually-added duplicate URL with a hint to remove the duplicate; clarified post-OAuth "still unauthorized" message — `/mcp` UI in obfuscated source.
+- `/branch` rewound-timeline fork producing tool_use without tool_result — `/branch` session-export internals.
+- `/model` Effort option for Bedrock application inference profile ARNs + `output_config.effort` propagation — model picker + Bedrock adapter.
+- Vertex AI / Bedrock structured-output `output_config: Extra inputs are not permitted` — provider adapter.
+- Vertex AI count_tokens 400 behind proxy gateways — count_tokens adapter.
+- ToolSearch missing MCP tools that connected after session start in nonblocking mode — MCP/tool-search interplay.
+- Images sent to newer models 2576px regression (already at 2000px locally).
+- Remote-control idle status redrawing twice per second (tmux `-CC` flooding) — Remote Control internal.
+- Stale view preference making assistant messages appear blank — Ink view-preference state.
+- Voice mode keybindings bound to Caps Lock — voice-mode keybinding validation.
+- 2.1.123 OAuth retry loop fix — pre-aligned (above).
+
+---
+
 ## 2.1.121 — April 28, 2026
 
 Applies the user-facing, tractable subset of the upstream 2.1.121 changelog (same-day double-release with 2.1.120).

@@ -168,6 +168,20 @@ export async function getAnthropicClient({
       ...(isDebugToStdErr() && { logger: createStderrLogger() }),
     }
 
+    // Upstream 2.1.122: ANTHROPIC_BEDROCK_SERVICE_TIER selects a Bedrock
+    // service tier. Sent as the X-Amzn-Bedrock-Service-Tier header. Only
+    // 'default', 'flex', and 'priority' are accepted by the Bedrock API; we
+    // pass the user's value through verbatim and let Bedrock surface any
+    // other value as a 400 (preferred to silently dropping a typo). Empty
+    // / unset → no header so the Bedrock account default applies.
+    const bedrockServiceTier = process.env.ANTHROPIC_BEDROCK_SERVICE_TIER
+    if (bedrockServiceTier && bedrockServiceTier.trim()) {
+      bedrockArgs.defaultHeaders = {
+        ...bedrockArgs.defaultHeaders,
+        'X-Amzn-Bedrock-Service-Tier': bedrockServiceTier.trim(),
+      }
+    }
+
     // Add API key authentication if available
     if (process.env.AWS_BEARER_TOKEN_BEDROCK) {
       bedrockArgs.skipAuth = true

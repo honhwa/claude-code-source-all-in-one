@@ -202,8 +202,15 @@ export async function handlePromptSubmit(
 
   // Handle exit commands by triggering the exit command instead of direct process.exit
   // Skip for remote bridge messages — "exit" typed on iOS shouldn't kill the local session
+  // Upstream 2.1.122: also skip in bash mode so `!exit` / `!quit` run as shell
+  // commands instead of terminating the CLI. Vim shortcuts (':q', ':wq', etc.)
+  // are not valid shell commands so they stay routed to /exit even in bash
+  // mode — only the bare 'exit' / 'quit' words matter to the shell.
+  const isBashShellExit =
+    mode === 'bash' && (input.trim() === 'exit' || input.trim() === 'quit')
   if (
     !skipSlashCommands &&
+    !isBashShellExit &&
     ['exit', 'quit', ':q', ':q!', ':wq', ':wq!'].includes(input.trim())
   ) {
     // Trigger the exit command which will show the feedback dialog

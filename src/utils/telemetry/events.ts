@@ -20,7 +20,12 @@ export function redactIfDisabled(content: string): string {
 
 export async function logOTelEvent(
   eventName: string,
-  metadata: { [key: string]: string | undefined } = {},
+  // Upstream 2.1.122: metadata values can be numbers as well as strings.
+  // Numeric attrs (input_tokens, duration_ms, cost_usd, etc.) are emitted
+  // as numbers so OTLP receivers can aggregate them as quantities instead
+  // of having to re-parse strings. Strings stay strings — pre-existing
+  // string callers don't need to change.
+  metadata: { [key: string]: string | number | undefined } = {},
 ): Promise<void> {
   const eventLogger = getEventLogger()
   if (!eventLogger) {
@@ -60,7 +65,9 @@ export async function logOTelEvent(
     attributes['workspace.host_paths'] = workspaceDir.split('|')
   }
 
-  // Add metadata as attributes - all values are already strings
+  // Add metadata as attributes. Upstream 2.1.122: number values are kept
+  // as numbers so OTLP receivers see them as quantities. The OTel
+  // Attributes type accepts both — no coercion needed.
   for (const [key, value] of Object.entries(metadata)) {
     if (value !== undefined) {
       attributes[key] = value

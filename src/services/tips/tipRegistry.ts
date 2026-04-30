@@ -711,8 +711,13 @@ export async function getRelevantTips(context?: TipContext): Promise<Tip[]> {
   const override = settings.spinnerTipsOverride
   const customTips = getCustomTips()
 
-  // If excludeDefault is true and there are custom tips, skip built-in tips entirely
-  if (override?.excludeDefault && customTips.length > 0) {
+  // Upstream 2.1.122: when `excludeDefault` is true, suppress built-in tips
+  // unconditionally — including time-based tips. The previous gate required
+  // `customTips.length > 0` so a user with `excludeDefault: true` and no
+  // custom tips would still see all built-ins. The new behavior matches the
+  // setting's name: opt out of defaults regardless of whether you provide
+  // a replacement.
+  if (override?.excludeDefault) {
     return customTips
   }
 
