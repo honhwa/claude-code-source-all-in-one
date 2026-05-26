@@ -98,6 +98,7 @@ import { VALID_INSTALLABLE_SCOPES, VALID_UPDATE_SCOPES } from './services/plugin
 import { initBundledSkills } from './skills/bundled/index.js';
 import type { AgentColorName } from './tools/AgentTool/agentColorManager.js';
 import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAgent, isCustomAgent, parseAgentsFromJson } from './tools/AgentTool/loadAgentsDir.js';
+import { resolveMainThreadAgent } from './utils/agents/resolveMainThreadAgent.js';
 import type { LogOption } from './types/logs.js';
 import type { Message as MessageType } from './types/message.js';
 import { assertMinVersion } from './utils/autoUpdater.js';
@@ -2129,7 +2130,7 @@ async function run(): Promise<CommanderCommand> {
     const agentSetting = agentCli ?? getInitialSettings().agent;
     let mainThreadAgentDefinition: (typeof agentDefinitions.activeAgents)[number] | undefined;
     if (agentSetting) {
-      mainThreadAgentDefinition = agentDefinitions.activeAgents.find(agent => agent.agentType === agentSetting);
+      mainThreadAgentDefinition = resolveMainThreadAgent(agentDefinitions.activeAgents, agentSetting);
       if (!mainThreadAgentDefinition) {
         logForDebugging(`Warning: agent "${agentSetting}" not found. ` + `Available agents: ${agentDefinitions.activeAgents.map(a => a.agentType).join(', ')}. ` + `Using default behavior.`);
       }

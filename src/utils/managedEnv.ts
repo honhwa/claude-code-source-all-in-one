@@ -80,13 +80,76 @@ function withoutCcdSpawnEnvKeys(
 }
 
 /**
+ * Settings-sourced color-control vars whose only legitimate purpose is to
+ * influence *child processes* (git, gh, npm, …). Applying them to process.env
+ * also strips Claude Code's own UI colors, because chalk's level is computed
+ * from process.env at first read — a user-settings `env: { NO_COLOR: "1" }`
+ * meant to silence noisy git output would also flatten the welcome banner,
+ * permission prompts, diffs, etc.
+ *
+ * Held outside process.env in this module-local map, then layered back into
+ * the subprocess env by `getSettingsSubprocessColorEnv()` so child processes
+ * still see them. The OS-level shell env (process.env at process spawn) is
+ * untouched — if the user exported NO_COLOR=1 in their shell, that still
+ * applies to the CLI itself, as intended.
+ */
+const SUBPROCESS_ONLY_COLOR_VARS = new Set(['NO_COLOR', 'FORCE_COLOR'])
+let settingsSubprocessColorEnv: Record<string, string> = {}
+
+/**
+ * Strip and remember NO_COLOR / FORCE_COLOR from a settings-sourced env
+ * object. Returns the env minus the color vars; their values are accumulated
+ * into `settingsSubprocessColorEnv` for later use in `subprocessEnv()`.
+ *
+ * Later sources overwrite earlier ones (matches process.env's Object.assign
+ * order in applySafeConfigEnvironmentVariables), and "unsetting" a previous
+ * source's value via `"NO_COLOR": ""` clears the recorded entry — Object.assign
+ * to process.env would have written the empty string, and our subprocess merge
+ * must produce the same observable result.
+ */
+function captureSubprocessOnlyColorVars(
+  env: Record<string, string>,
+): Record<string, string> {
+  let stripped: Record<string, string> | undefined
+  for (const key of Object.keys(env)) {
+    if (!SUBPROCESS_ONLY_COLOR_VARS.has(key.toUpperCase())) continue
+    if (!stripped) stripped = { ...env }
+    const value = env[key]!
+    if (value === '') {
+      delete settingsSubprocessColorEnv[key]
+    } else {
+      settingsSubprocessColorEnv[key] = value
+    }
+    delete stripped[key]
+  }
+  return stripped ?? env
+}
+
+/**
+ * The settings-only NO_COLOR/FORCE_COLOR values, for layering into subprocess
+ * envs. Re-cleared by `resetSettingsSubprocessColorEnv()` before each apply
+ * pass so a removed settings entry stops propagating to children.
+ */
+export function getSettingsSubprocessColorEnv(): Readonly<
+  Record<string, string>
+> {
+  return settingsSubprocessColorEnv
+}
+
+function resetSettingsSubprocessColorEnv(): void {
+  settingsSubprocessColorEnv = {}
+}
+
+/**
  * Compose the strip filters applied to every settings-sourced env object.
  */
 function filterSettingsEnv(
   env: Record<string, string> | undefined,
 ): Record<string, string> {
-  return withoutCcdSpawnEnvKeys(
-    withoutHostManagedProviderVars(withoutSSHTunnelVars(env)),
+  return captureSubprocessOnlyColorVars(
+    withoutCcdSpawnEnvKeys(
+      withoutHostManagedProviderVars(withoutSSHTunnelVars(env)),
+    ),
   )
 }
 
@@ -129,6 +192,11 @@ export function applySafeConfigEnvironmentVariables(): void {
         ? new Set(Object.keys(process.env))
         : null
   }
+
+  // Start each apply pass with a fresh subprocess-only color-env snapshot so
+  // a removed settings entry stops propagating to children. filterSettingsEnv
+  // re-populates as it walks each source below.
+  resetSettingsSubprocessColorEnv()
 
   // Global config (~/.claude.json) is user-controlled. In CCD mode,
   // filterSettingsEnv strips keys that were in the spawn env snapshot so
@@ -185,6 +253,10 @@ export function applySafeConfigEnvironmentVariables(): void {
  * dangerous environment variables such as LD_PRELOAD, PATH, etc.
  */
 export function applyConfigEnvironmentVariables(): void {
+  // See note in applySafeConfigEnvironmentVariables — the merged-settings
+  // pass below is the authoritative one, so reset here too.
+  resetSettingsSubprocessColorEnv()
+
   Object.assign(process.env, filterSettingsEnv(getGlobalConfig().env))
 
   Object.assign(process.env, filterSettingsEnv(getSettings_DEPRECATED()?.env))

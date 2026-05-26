@@ -38,6 +38,7 @@ import {
   isBuiltInAgent,
   parseAgentsFromJson,
 } from 'src/tools/AgentTool/loadAgentsDir.js'
+import { resolveMainThreadAgent } from 'src/utils/agents/resolveMainThreadAgent.js'
 import type { Message, NormalizedUserMessage } from 'src/types/message.js'
 import type { QueuedCommand } from 'src/types/textInputTypes.js'
 import {
@@ -4388,8 +4389,14 @@ async function handleInitializeRequest(
   if (options.agent) {
     // If main.tsx already found this agent (filesystem-defined), it already
     // applied systemPrompt/model/initialPrompt. Skip to avoid double-apply.
-    const alreadyResolved = getMainThreadAgentType() === options.agent
-    const mainThreadAgent = agents.find(a => a.agentType === options.agent)
+    // alreadyResolved compares against the resolved agentType (not the raw
+    // CLI string) so the bare-name → plugin-prefixed resolution from main.tsx
+    // is recognized here too.
+    const mainThreadAgent = resolveMainThreadAgent(agents, options.agent)
+    const alreadyResolved =
+      getMainThreadAgentType() === options.agent ||
+      (mainThreadAgent !== undefined &&
+        getMainThreadAgentType() === mainThreadAgent.agentType)
     if (mainThreadAgent && !alreadyResolved) {
       // Update the main thread agent type in bootstrap state
       setMainThreadAgentType(mainThreadAgent.agentType)

@@ -1285,12 +1285,34 @@ export const getClaudeAIOAuthTokens = memoize((): OAuthTokens | null => {
       return null
     }
 
-    return oauthData
+    return sanitizeStoredOAuthTokens(oauthData)
   } catch (error) {
     logError(error)
     return null
   }
 })
+
+/**
+ * Drop fields with a wrong runtime shape from a credentials.json record.
+ *
+ * Manually-edited or partially-written credentials files have been seen with
+ * `scopes: null`, `scopes: "user:inference"` (string), and similar — the
+ * downstream OAuth refresh path treats `scopes` as `string[] | undefined`
+ * and a string sneaks through truthy `?.includes()` checks while breaking
+ * any code that iterates or `.join`s. Once that path errored mid-refresh,
+ * the lockfile retry loop would burn its 5 attempts (1s+ each) before
+ * giving up, producing the "CLI hangs on startup" symptom reported in
+ * upstream 2.1.143. Normalizing here keeps the bad field from infecting
+ * the in-memory token; the file itself is left as-is so the next /login
+ * (or any successful refresh) overwrites it cleanly via saveOAuthTokensIfNeeded.
+ */
+function sanitizeStoredOAuthTokens(tokens: OAuthTokens): OAuthTokens {
+  if (tokens.scopes !== undefined && !Array.isArray(tokens.scopes)) {
+    logEvent('tengu_oauth_tokens_invalid_scopes', {})
+    return { ...tokens, scopes: undefined }
+  }
+  return tokens
+}
 
 /**
  * Clears all OAuth token caches. Call this on 401 errors to ensure
@@ -1407,7 +1429,7 @@ export async function getClaudeAIOAuthTokensAsync(): Promise<OAuthTokens | null>
     if (!oauthData?.accessToken) {
       return null
     }
-    return oauthData
+    return sanitizeStoredOAuthTokens(oauthData)
   } catch (error) {
     logError(error)
     return null

@@ -23,6 +23,8 @@ import {
   markPluginVersionOrphaned,
 } from '../../utils/plugins/cacheUtils.js'
 import {
+  findDisabledTransitiveDeps,
+  findReverseDependentEntries,
   findReverseDependents,
   formatReverseDependentsSuffix,
 } from '../../utils/plugins/dependencyResolver.js'
@@ -594,6 +596,16 @@ export async function setPluginEnabledOp(
   plugin: string,
   enabled: boolean,
   scope?: InstallableScope,
+  options: {
+    /**
+     * Skip the disable-blocker / enable-cascade dependency logic. Used when
+     * setPluginEnabledOp is called recursively from the cascade walker so we
+     * don't re-walk the same closure (and so a transitive dep being enabled
+     * doesn't trigger a "no other enabled plugin depends on this" check on
+     * its own deps that haven't been visited yet).
+     */
+    skipDependencyHandling?: boolean
+  } = {},
 ): Promise<PluginOperationResult> {
   const operation = enabled ? 'enable' : 'disable'
 
@@ -726,16 +738,84 @@ export async function setPluginEnabledOp(
     }
   }
 
-  // On disable: capture reverse dependents from the PRE-disable snapshot,
-  // before we write settings and clear the memoized plugin cache.
+  // ── Dependency handling ──
+  // On DISABLE: pre-snapshot enabled reverse dependents and REFUSE if any
+  //   exist. Caller must walk the chain themselves (or the eventual
+  //   `claude plugin disable --cascade` once it exists).
+  // On ENABLE: pre-snapshot any transitive deps that are installed but
+  //   currently disabled. We enable them first so the moment this plugin's
+  //   settings write goes through, the dep graph is consistent (no flash
+  //   where the just-enabled plugin loads against still-disabled deps and
+  //   gets demoted by verifyAndDemote).
+  // Both behaviors are gated on `!options.skipDependencyHandling` so the
+  // cascade walker doesn't re-trigger them on every recursive call.
   let reverseDependents: string[] | undefined
-  if (!enabled) {
+  let enabledTransitiveDeps: string[] = []
+  if (!options.skipDependencyHandling) {
     const { enabled: loadedEnabled, disabled } = await loadAllPlugins()
-    const rdeps = findReverseDependents(pluginId, [
-      ...loadedEnabled,
-      ...disabled,
-    ])
-    if (rdeps.length > 0) reverseDependents = rdeps
+    const allLoaded = [...loadedEnabled, ...disabled]
+
+    if (!enabled) {
+      const rdepEntries = findReverseDependentEntries(pluginId, allLoaded)
+      if (rdepEntries.length > 0) {
+        // Copy-pasteable: list the dependent plugins first (deepest first
+        // would be more correct for a chain, but reverse-dependents are flat
+        // here — the user runs the listed disables then re-runs the original
+        // disable on `pluginId`).
+        const chain = rdepEntries.map(p => p.source).join(' ')
+        const requiredByList = rdepEntries.map(p => p.name).join(', ')
+        return {
+          success: false,
+          message:
+            `Cannot disable plugin "${pluginId}" — it is required by: ${requiredByList}. ` +
+            `Disable those first:\n  claude plugin disable ${chain}`,
+          pluginId,
+          pluginName: parsePluginIdentifier(pluginId).name,
+          reverseDependents: rdepEntries.map(p => p.name),
+        }
+      }
+    } else {
+      const { toEnable, missing } = findDisabledTransitiveDeps(
+        pluginId,
+        allLoaded,
+      )
+      if (missing.length > 0) {
+        return {
+          success: false,
+          message:
+            `Cannot enable plugin "${pluginId}" — required dependency ` +
+            `${missing.length === 1 ? 'is' : 's are'} not installed: ` +
+            `${missing.join(', ')}. Install ${missing.length === 1 ? 'it' : 'them'} first.`,
+        }
+      }
+      // Enable each disabled dep in dependency-first order. Recursion is
+      // safe because skipDependencyHandling short-circuits re-entry.
+      for (const dep of toEnable) {
+        // Each dep lives in its own scope's settings — auto-detect (no
+        // explicit scope arg) so we write to the same place the original
+        // install landed.
+        const r = await setPluginEnabledOp(dep.source, true, undefined, {
+          skipDependencyHandling: true,
+        })
+        if (!r.success) {
+          return {
+            success: false,
+            message:
+              `Failed to enable transitive dependency "${dep.source}": ${r.message}. ` +
+              `"${pluginId}" was not enabled.`,
+          }
+        }
+        enabledTransitiveDeps.push(dep.source)
+      }
+    }
+
+    // Used for the original "warning: required by X" suffix when the disable
+    // path didn't refuse (i.e. skipDependencyHandling caller). Keep the
+    // old reverseDependents shape for back-compat.
+    if (!enabled) {
+      const rdeps = findReverseDependents(pluginId, allLoaded)
+      if (rdeps.length > 0) reverseDependents = rdeps
+    }
   }
 
   // ── ACTION: write settings ──
@@ -756,9 +836,13 @@ export async function setPluginEnabledOp(
 
   const { name: pluginName } = parsePluginIdentifier(pluginId)
   const depWarn = formatReverseDependentsSuffix(reverseDependents)
+  const cascadeSuffix =
+    enabledTransitiveDeps.length > 0
+      ? ` (+ enabled ${enabledTransitiveDeps.length} ${enabledTransitiveDeps.length === 1 ? 'dependency' : 'dependencies'}: ${enabledTransitiveDeps.join(', ')})`
+      : ''
   return {
     success: true,
-    message: `Successfully ${operation}d plugin: ${pluginName} (scope: ${resolvedScope})${depWarn}`,
+    message: `Successfully ${operation}d plugin: ${pluginName} (scope: ${resolvedScope})${depWarn}${cascadeSuffix}`,
     pluginId,
     pluginName,
     scope: resolvedScope,

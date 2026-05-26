@@ -1,15 +1,38 @@
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { join as posixJoin } from 'path/posix'
+import { isEnvTruthy } from '../envUtils.js'
 import { getSessionEnvVars } from '../sessionEnvVars.js'
 import type { ShellProvider } from './shellProvider.js'
 
 /**
  * PowerShell invocation flags + command. Shared by the provider's getSpawnArgs
  * and the hook spawn path in hooks.ts so the flag set stays in one place.
+ *
+ * Upstream 2.1.143: pass `-ExecutionPolicy Bypass` so a corporate
+ * AllSigned/RemoteSigned policy doesn't reject our generated cwd-tracking
+ * script (it's emitted to stdin as a single -Command string, which on a
+ * locked-down machine fails with `cannot be loaded because running scripts
+ * is disabled on this system`). Bypass is scoped to this single invocation —
+ * it does NOT alter the user's machine policy.
+ *
+ * Escape hatch for users who deliberately enforce ExecutionPolicy in
+ * managed/audited environments: `CLAUDE_CODE_POWERSHELL_RESPECT_EXECUTION_POLICY=1`.
  */
 export function buildPowerShellArgs(cmd: string): string[] {
-  return ['-NoProfile', '-NonInteractive', '-Command', cmd]
+  const respectPolicy = isEnvTruthy(
+    process.env.CLAUDE_CODE_POWERSHELL_RESPECT_EXECUTION_POLICY,
+  )
+  return respectPolicy
+    ? ['-NoProfile', '-NonInteractive', '-Command', cmd]
+    : [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        cmd,
+      ]
 }
 
 /**

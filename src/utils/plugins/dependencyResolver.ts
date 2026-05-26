@@ -245,21 +245,94 @@ export function findReverseDependents(
   pluginId: PluginId,
   plugins: readonly LoadedPlugin[],
 ): string[] {
+  return findReverseDependentEntries(pluginId, plugins).map(p => p.name)
+}
+
+/**
+ * Like `findReverseDependents` but returns the matching `LoadedPlugin`
+ * entries so callers (e.g. cascade-disable refusal) can reach for `source`
+ * to render a copy-pasteable `claude plugin disable X@Y` chain.
+ */
+export function findReverseDependentEntries(
+  pluginId: PluginId,
+  plugins: readonly LoadedPlugin[],
+): LoadedPlugin[] {
   const { name: targetName } = parsePluginIdentifier(pluginId)
-  return plugins
-    .filter(
-      p =>
-        p.enabled &&
-        p.source !== pluginId &&
-        (p.manifest.dependencies ?? []).some(d => {
-          const qualified = qualifyDependency(d, p.source)
-          // Bare dep (from @inline plugin): match by name only
-          return parsePluginIdentifier(qualified).marketplace
-            ? qualified === pluginId
-            : qualified === targetName
-        }),
-    )
-    .map(p => p.name)
+  return plugins.filter(
+    p =>
+      p.enabled &&
+      p.source !== pluginId &&
+      (p.manifest.dependencies ?? []).some(d => {
+        const qualified = qualifyDependency(d, p.source)
+        // Bare dep (from @inline plugin): match by name only
+        return parsePluginIdentifier(qualified).marketplace
+          ? qualified === pluginId
+          : qualified === targetName
+      }),
+  )
+}
+
+/**
+ * Walk the transitive dependency closure of `pluginId` over the loaded
+ * plugin set and return the *currently-disabled* deps that need to be
+ * flipped to satisfy the enable. Order is dependency-first so callers can
+ * iterate and enable in that order (a dep is enabled before any plugin that
+ * needs it). The root `pluginId` is never included.
+ *
+ * Returns the empty array when:
+ *   - the plugin has no `dependencies`
+ *   - every transitive dep is already enabled
+ *   - a transitive dep can't be located in `plugins` (i.e. not installed)
+ *     — that case surfaces via the second tuple element so the caller can
+ *     report a precise "install X first" error instead of silently no-op'ing.
+ */
+export function findDisabledTransitiveDeps(
+  pluginId: PluginId,
+  plugins: readonly LoadedPlugin[],
+): { toEnable: LoadedPlugin[]; missing: string[] } {
+  const byId = new Map<string, LoadedPlugin>()
+  const byName = new Map<string, LoadedPlugin[]>() // for bare deps from @inline
+  for (const p of plugins) {
+    byId.set(p.source, p)
+    const arr = byName.get(p.name) ?? []
+    arr.push(p)
+    byName.set(p.name, arr)
+  }
+
+  const toEnable: LoadedPlugin[] = []
+  const missing: string[] = []
+  const visited = new Set<string>([pluginId])
+
+  function lookup(rawDep: string, declaringId: string): LoadedPlugin | null {
+    const qualified = qualifyDependency(rawDep, declaringId)
+    const exact = byId.get(qualified)
+    if (exact) return exact
+    if (!parsePluginIdentifier(qualified).marketplace) {
+      // Bare dep — match by name. Ambiguity (two plugins same name) means we
+      // can't safely pick one; treat as missing so the user disambiguates.
+      const candidates = byName.get(qualified)
+      if (candidates && candidates.length === 1) return candidates[0]!
+    }
+    return null
+  }
+
+  function walk(p: LoadedPlugin): void {
+    for (const rawDep of p.manifest.dependencies ?? []) {
+      const dep = lookup(rawDep, p.source)
+      if (!dep) {
+        missing.push(qualifyDependency(rawDep, p.source))
+        continue
+      }
+      if (visited.has(dep.source)) continue
+      visited.add(dep.source)
+      walk(dep)
+      if (!dep.enabled) toEnable.push(dep)
+    }
+  }
+
+  const root = byId.get(pluginId)
+  if (root) walk(root)
+  return { toEnable, missing }
 }
 
 /**

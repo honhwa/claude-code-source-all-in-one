@@ -164,6 +164,32 @@ function* yieldMissingToolResultBlocks(
 const MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3
 
 /**
+ * Cap on consecutive Stop-hook blocking returns within a single turn.
+ *
+ * Stop hooks that exit 2 prompt the model to continue. A bad hook (always
+ * blocks, no matter what the model produced) can loop forever — model
+ * responds → hook blocks → model retries → hook blocks → … burning API
+ * tokens and pinning the turn open. After this many consecutive blocks the
+ * loop emits a system warning and terminates so the user gets control back.
+ *
+ * 8 is generous: a Stop hook that legitimately wants several
+ * continuation passes (e.g. "did you update CHANGELOG? did you bump the
+ * version? did you …") still has room, but 8 in a row is clearly a bug.
+ *
+ * Override: `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP=<n>`. A non-integer or value
+ * < 1 falls back to the default. 0 is rejected (would defeat the cap on
+ * the very first block); use a small integer like `1` for fail-fast.
+ */
+const DEFAULT_STOP_HOOK_BLOCK_CAP = 8
+function getStopHookBlockCap(): number {
+  const raw = process.env.CLAUDE_CODE_STOP_HOOK_BLOCK_CAP
+  if (raw === undefined) return DEFAULT_STOP_HOOK_BLOCK_CAP
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_STOP_HOOK_BLOCK_CAP
+  return n
+}
+
+/**
  * Is this a max_output_tokens error message? If so, the streaming loop should
  * withhold it from SDK callers until we know whether the recovery loop can
  * continue. Yielding early leaks an intermediate error to SDK callers (e.g.
@@ -210,6 +236,15 @@ type State = {
   maxOutputTokensOverride: number | undefined
   pendingToolUseSummary: Promise<ToolUseSummaryMessage | null> | undefined
   stopHookActive: boolean | undefined
+  /**
+   * How many CONSECUTIVE iterations have ended via the
+   * "stop hook blocking → continue" path. Reset to 0 on every other
+   * continuation site. Once it reaches DEFAULT_STOP_HOOK_BLOCK_CAP (override
+   * via CLAUDE_CODE_STOP_HOOK_BLOCK_CAP) the loop emits a warning system
+   * message and terminates so a misbehaving Stop hook can't pin a turn open
+   * forever. See `STOP_HOOK_BLOCK_CAP` below.
+   */
+  consecutiveStopHookBlocks: number
   turnCount: number
   // Why the previous iteration continued. Undefined on first iteration.
   // Lets tests assert recovery paths fired without inspecting message contents.
@@ -271,6 +306,7 @@ async function* queryLoop(
     maxOutputTokensOverride: params.maxOutputTokensOverride,
     autoCompactTracking: undefined,
     stopHookActive: undefined,
+    consecutiveStopHookBlocks: 0,
     maxOutputTokensRecoveryCount: 0,
     hasAttemptedReactiveCompact: false,
     turnCount: 1,
@@ -317,6 +353,7 @@ async function* queryLoop(
       maxOutputTokensOverride,
       pendingToolUseSummary,
       stopHookActive,
+      consecutiveStopHookBlocks,
       turnCount,
     } = state
 
@@ -1105,6 +1142,7 @@ async function* queryLoop(
               maxOutputTokensOverride: undefined,
               pendingToolUseSummary: undefined,
               stopHookActive: undefined,
+              consecutiveStopHookBlocks: 0,
               turnCount,
               transition: {
                 reason: 'collapse_drain_retry',
@@ -1158,6 +1196,7 @@ async function* queryLoop(
             maxOutputTokensOverride: undefined,
             pendingToolUseSummary: undefined,
             stopHookActive: undefined,
+            consecutiveStopHookBlocks: 0,
             turnCount,
             transition: { reason: 'reactive_compact_retry' },
           }
@@ -1213,6 +1252,7 @@ async function* queryLoop(
             maxOutputTokensOverride: ESCALATED_MAX_TOKENS,
             pendingToolUseSummary: undefined,
             stopHookActive: undefined,
+            consecutiveStopHookBlocks: 0,
             turnCount,
             transition: { reason: 'max_output_tokens_escalate' },
           }
@@ -1241,6 +1281,7 @@ async function* queryLoop(
             maxOutputTokensOverride: undefined,
             pendingToolUseSummary: undefined,
             stopHookActive: undefined,
+            consecutiveStopHookBlocks: 0,
             turnCount,
             transition: {
               reason: 'max_output_tokens_recovery',
@@ -1280,6 +1321,23 @@ async function* queryLoop(
       }
 
       if (stopHookResult.blockingErrors.length > 0) {
+        const nextBlockCount = consecutiveStopHookBlocks + 1
+        const cap = getStopHookBlockCap()
+        if (nextBlockCount >= cap) {
+          // A stop hook that always blocks would pin the turn open forever.
+          // Surface a system-warning message so the user sees the loop ended
+          // intentionally, log for telemetry, and return so they get control
+          // back instead of burning more API calls.
+          logEvent('tengu_stop_hook_block_cap_reached', {
+            cap: cap as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          })
+          yield createSystemMessage(
+            `Stop hook blocked ${cap} times in a row — ending the turn to break the loop. ` +
+              `Review your Stop hook (or raise CLAUDE_CODE_STOP_HOOK_BLOCK_CAP if this is expected).`,
+            'warning',
+          )
+          return { reason: 'stop_hook_prevented' }
+        }
         const next: State = {
           messages: [
             ...messagesForQuery,
@@ -1298,6 +1356,7 @@ async function* queryLoop(
           maxOutputTokensOverride: undefined,
           pendingToolUseSummary: undefined,
           stopHookActive: true,
+          consecutiveStopHookBlocks: nextBlockCount,
           turnCount,
           transition: { reason: 'stop_hook_blocking' },
         }
@@ -1334,6 +1393,7 @@ async function* queryLoop(
             maxOutputTokensOverride: undefined,
             pendingToolUseSummary: undefined,
             stopHookActive: undefined,
+            consecutiveStopHookBlocks: 0,
             turnCount,
             transition: { reason: 'token_budget_continuation' },
           }
@@ -1722,6 +1782,11 @@ async function* queryLoop(
       pendingToolUseSummary: nextPendingToolUseSummary,
       maxOutputTokensOverride: undefined,
       stopHookActive,
+      // Reaching here means a tool-using turn produced fresh tool results, so
+      // the next iteration is no longer a CONSECUTIVE stop-hook continuation
+      // (the cap counts hooks-blocking-an-empty-response cycles, not normal
+      // multi-turn work). Reset the counter.
+      consecutiveStopHookBlocks: 0,
       transition: { reason: 'next_turn' },
     }
     state = next

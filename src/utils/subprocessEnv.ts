@@ -1,6 +1,7 @@
 import { isEnvTruthy } from './envUtils.js'
 import { getSessionId } from '../bootstrap/state.js'
 import { getEffortLevelForSubprocess } from './effort.js'
+import { getSettingsSubprocessColorEnv } from './managedEnv.js'
 
 /**
  * Env vars to strip from subprocess environments when running inside GitHub
@@ -145,6 +146,14 @@ export function subprocessEnv(): NodeJS.ProcessEnv {
     ? { CLAUDE_EFFORT: effortLevel }
     : {}
 
+  // Upstream 2.1.143: NO_COLOR / FORCE_COLOR from settings.json env apply to
+  // subprocesses only — managedEnv strips them from process.env so chalk's
+  // initial level read isn't disturbed (the CLI's own UI keeps colors), then
+  // hands them back here to layer onto child envs. The OS-level shell env is
+  // already in process.env, so manually-exported NO_COLOR still wins for both
+  // the CLI and its children — only the settings-sourced values are scoped.
+  const settingsColorEnv = getSettingsSubprocessColorEnv()
+
   if (!isEnvTruthy(process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB)) {
     const merged = {
       ...process.env,
@@ -152,6 +161,7 @@ export function subprocessEnv(): NodeJS.ProcessEnv {
       ...agentAttribution,
       ...sessionAttribution,
       ...effortAttribution,
+      ...settingsColorEnv,
     }
     stripOtelVars(merged)
     return merged
@@ -162,6 +172,7 @@ export function subprocessEnv(): NodeJS.ProcessEnv {
     ...agentAttribution,
     ...sessionAttribution,
     ...effortAttribution,
+    ...settingsColorEnv,
   }
   for (const k of GHA_SUBPROCESS_SCRUB) {
     delete env[k]
