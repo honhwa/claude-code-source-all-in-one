@@ -267,7 +267,7 @@ type ExtraUsageSectionProps = {
   extraUsage: ExtraUsage;
   maxWidth: number;
 };
-const EXTRA_USAGE_SECTION_TITLE = 'Extra usage';
+const EXTRA_USAGE_SECTION_TITLE = 'Usage credits';
 function ExtraUsageSection(t0) {
   const $ = _c(20);
   const {
@@ -283,7 +283,7 @@ function ExtraUsageSection(t0) {
     if (extraUsageCommand.isEnabled()) {
       let t1;
       if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-        t1 = <Box flexDirection="column"><Text bold={true}>{EXTRA_USAGE_SECTION_TITLE}</Text><Text dimColor={true}>Extra usage not enabled · /extra-usage to enable</Text></Box>;
+        t1 = <Box flexDirection="column"><Text bold={true}>{EXTRA_USAGE_SECTION_TITLE}</Text><Text dimColor={true}>Usage credits not enabled · /usage-credits to enable</Text></Box>;
         $[0] = t1;
       } else {
         t1 = $[0];

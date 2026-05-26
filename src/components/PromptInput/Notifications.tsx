@@ -292,7 +292,7 @@ function NotificationContent({
           </Text>)}
       {isInOverageMode && !isTeamOrEnterprise && <Box>
           <Text dimColor wrap="truncate">
-            Now using extra usage
+            Now using usage credits
           </Text>
         </Box>}
       {apiKeyHelperSlow && <Box>

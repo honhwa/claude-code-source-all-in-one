@@ -81,7 +81,7 @@ const RATE_LIMIT_DISPLAY_NAMES: Record<RateLimitType, string> = {
   seven_day: 'weekly limit',
   seven_day_opus: 'Opus limit',
   seven_day_sonnet: 'Sonnet limit',
-  overage: 'extra usage limit',
+  overage: 'usage credit limit',
 }
 
 export function getRateLimitDisplayName(type: RateLimitType): string {

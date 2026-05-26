@@ -1302,6 +1302,28 @@ export async function getClaudeCodeMcpConfigs(
 }
 
 /**
+ * Walk every editable scope's `.mcp.json` (and managed scopes) and return
+ * any *configuration* errors collected during parsing — schema mismatches,
+ * unexpanded env vars, JSON parse failures.
+ *
+ * Distinct from the `errors: PluginError[]` returned by `getAllMcpConfigs`:
+ * that stream is plugin-loading errors. Config errors used to be logged to
+ * the debug stream and silently dropped from the CLI — so `claude mcp list`
+ * would print "No MCP servers configured" when the user had a perfectly
+ * intentional `.mcp.json` that just happened to use VS Code's `servers` key
+ * instead of `mcpServers` (upstream 2.1.144). Surfacing them here lets the
+ * CLI handler render an actionable explanation.
+ */
+export function getAllMcpConfigErrors(): ValidationError[] {
+  const errors: ValidationError[] = []
+  for (const scope of ['enterprise', 'user', 'project', 'local'] as const) {
+    const { errors: scopeErrors } = getMcpConfigsByScope(scope)
+    errors.push(...scopeErrors)
+  }
+  return errors
+}
+
+/**
  * Get all MCP configurations across all scopes, including claude.ai servers.
  * This may be slow due to network calls - use getClaudeCodeMcpConfigs() for fast startup.
  * @returns All server configurations with appropriate scopes

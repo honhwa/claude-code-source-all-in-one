@@ -10,19 +10,26 @@ function isExtraUsageAllowed(): boolean {
   return isOverageProvisioningAllowed()
 }
 
+// Upstream 2.1.144: the user-facing surface is "usage credits" now; the
+// previous "extra-usage" name stays as an alias so existing aliases, hooks,
+// and muscle memory keep working. Aliases are accepted by the slash-command
+// parser (commands.ts:695) and surfaced in /help (commands.ts:710), so
+// `/extra-usage` continues to be discoverable as a recognized form.
 export const extraUsage = {
   type: 'local-jsx',
-  name: 'extra-usage',
-  description: 'Configure extra usage to keep working when limits are hit',
+  name: 'usage-credits',
+  aliases: ['extra-usage'],
+  description: 'Configure usage credits to keep working when limits are hit',
   isEnabled: () => isExtraUsageAllowed() && !getIsNonInteractiveSession(),
   load: () => import('./extra-usage.js'),
 } satisfies Command
 
 export const extraUsageNonInteractive = {
   type: 'local',
-  name: 'extra-usage',
+  name: 'usage-credits',
+  aliases: ['extra-usage'],
   supportsNonInteractive: true,
-  description: 'Configure extra usage to keep working when limits are hit',
+  description: 'Configure usage credits to keep working when limits are hit',
   isEnabled: () => isExtraUsageAllowed() && getIsNonInteractiveSession(),
   get isHidden() {
     return !getIsNonInteractiveSession()

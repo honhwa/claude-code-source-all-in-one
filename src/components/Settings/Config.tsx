@@ -212,7 +212,7 @@ export function Config({
       mainLoopModelForSession: null
     }));
     setChanges(prev_0 => {
-      const valStr = modelDisplayString(value) + (isBilledAsExtraUsage(value, false, isOpus1mMergeEnabled()) ? ' · Billed as extra usage' : '');
+      const valStr = modelDisplayString(value) + (isBilledAsExtraUsage(value, false, isOpus1mMergeEnabled()) ? ' · Billed as usage credits' : '');
       if ('model' in prev_0) {
         const {
           model,

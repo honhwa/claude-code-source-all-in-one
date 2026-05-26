@@ -539,8 +539,8 @@ export function getAssistantMessageFromError(
     // (e.g. 1M context without Extra Usage) and infra capacity 429s land here.
     if (error.message.includes('Extra usage is required for long context')) {
       const hint = getIsNonInteractiveSession()
-        ? 'enable extra usage at claude.ai/settings/usage, or use --model to switch to standard context'
-        : 'run /extra-usage to enable, or /model to switch to standard context'
+        ? 'enable usage credits at claude.ai/settings/usage, or use --model to switch to standard context'
+        : 'run /usage-credits to enable, or /model to switch to standard context'
       return createAssistantAPIErrorMessage({
         content: `${API_ERROR_MESSAGE_PREFIX}: Extra usage is required for 1M context · ${hint}`,
         error: 'rate_limit',

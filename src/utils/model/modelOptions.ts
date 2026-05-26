@@ -218,7 +218,7 @@ function getMaxOpusOption(fastMode = false): ModelOption {
 
 export function getMaxSonnet46_1MOption(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
-  const billingInfo = isClaudeAISubscriber() ? ' · Billed as extra usage' : ''
+  const billingInfo = isClaudeAISubscriber() ? ' · Billed as usage credits' : ''
   return {
     value: 'sonnet[1m]',
     label: 'Sonnet (1M context)',
@@ -227,7 +227,7 @@ export function getMaxSonnet46_1MOption(): ModelOption {
 }
 
 export function getMaxOpus46_1MOption(fastMode = false): ModelOption {
-  const billingInfo = isClaudeAISubscriber() ? ' · Billed as extra usage' : ''
+  const billingInfo = isClaudeAISubscriber() ? ' · Billed as usage credits' : ''
   return {
     value: 'opus[1m]',
     label: 'Opus (1M context)',

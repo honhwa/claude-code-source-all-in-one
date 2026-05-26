@@ -119,10 +119,21 @@ export async function initialize(): Promise<void> {
     },
     // Ignore special file types (sockets, FIFOs, devices) - they cannot be watched
     // and will error with EOPNOTSUPP on macOS. Only allow regular files and directories.
+    // Upstream 2.1.144: also ignore non-.md FILES — a build that drops
+    // hundreds of intermediate artifacts into a skill directory was
+    // triggering a reload-and-stat per file and exhausting the file
+    // descriptor budget. Skill content is .md-only (SKILL.md plus any
+    // markdown the skill author references), so non-.md changes can never
+    // affect what loadSkillsFromDirectory will pick up. Directories must
+    // remain watchable so chokidar still descends into new skill subdirs.
     ignored: (path, stats) => {
       if (stats && !stats.isFile() && !stats.isDirectory()) return true
       // Ignore .git directories
-      return path.split(platformPath.sep).some(dir => dir === '.git')
+      if (path.split(platformPath.sep).some(dir => dir === '.git')) return true
+      // Skip non-.md files. Directories pass through (stats?.isDirectory()
+      // is true OR stats is undefined during the pre-stat enumeration).
+      if (stats?.isFile() && !path.toLowerCase().endsWith('.md')) return true
+      return false
     },
     ignorePermissionErrors: true,
     usePolling: USE_POLLING,

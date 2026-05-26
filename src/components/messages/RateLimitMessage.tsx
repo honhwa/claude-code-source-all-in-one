@@ -1,6 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useEffect, useMemo, useState } from 'react';
-import { extraUsage } from 'src/commands/extra-usage/index.js';
+import { extraUsage } from 'src/commands/usage-credits/index.js';
 import { Box, Text } from 'src/ink.js';
 import { useClaudeAiLimits } from 'src/services/claudeAiLimitsHook.js';
 import { shouldProcessMockLimits } from 'src/services/rateLimitMocking.js'; // Used for /mock-limits command
@@ -26,7 +26,7 @@ export function getUpsellMessage({
   if (!shouldShowUpsell) return null;
   if (isMax20x) {
     if (isExtraUsageCommandEnabled) {
-      return '/extra-usage to finish what you\u2019re working on.';
+      return '/usage-credits to finish what you\u2019re working on.';
     }
     return '/login to switch to an API usage-billed account.';
   }
@@ -39,11 +39,11 @@ export function getUpsellMessage({
   if (isTeamOrEnterprise) {
     if (!isExtraUsageCommandEnabled) return null;
     if (hasBillingAccess) {
-      return '/extra-usage to finish what you\u2019re working on.';
+      return '/usage-credits to finish what you\u2019re working on.';
     }
-    return '/extra-usage to request more usage from your admin.';
+    return '/usage-credits to request more usage from your admin.';
   }
-  return '/upgrade or /extra-usage to finish what you\u2019re working on.';
+  return '/upgrade or /usage-credits to finish what you\u2019re working on.';
 }
 type RateLimitMessageProps = {
   text: string;

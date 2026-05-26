@@ -27,14 +27,30 @@ const MAX_CONVERSATION_TEXT = 1000
 
 /**
  * Flatten a message array into a single text string for Haiku title input.
- * Skips meta/non-human messages. Tail-slices to the last 1000 chars so
- * recent context wins when the conversation is long.
+ *
+ * Excludes anything that is NOT human-authored conversation:
+ *  - non-user/assistant message types
+ *  - `isMeta` (system nudges, recovery messages)
+ *  - `toolUseResult` (tool output dressed up as a user message)
+ *  - `isCompactSummary` ("This session is being continued…" pre-amble)
+ *  - non-human origins (channel pushes, coordinator-injected prompts, and
+ *    plugin monitor output that gets enqueued as user-shaped messages — see
+ *    the `origin: { kind: 'channel', server }` enqueue in cli/print.ts and
+ *    the `kind: 'coordinator'` attachments in utils/attachments.ts; these
+ *    were previously slipping through and dominating titles for sessions
+ *    where a plugin's startup notification arrived before the user typed
+ *    anything — upstream 2.1.144)
+ *
+ * Tail-slices to the last 1000 chars so recent context wins when the
+ * conversation is long.
  */
 export function extractConversationText(messages: Message[]): string {
   const parts: string[] = []
   for (const msg of messages) {
     if (msg.type !== 'user' && msg.type !== 'assistant') continue
     if ('isMeta' in msg && msg.isMeta) continue
+    if ('toolUseResult' in msg && msg.toolUseResult) continue
+    if ('isCompactSummary' in msg && msg.isCompactSummary) continue
     if ('origin' in msg && msg.origin && msg.origin.kind !== 'human') continue
     const content = msg.message.content
     if (typeof content === 'string') {

@@ -45,7 +45,7 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
       return {
         type: 'message',
         value:
-          'Your organization already has unlimited extra usage. No request needed.',
+          'Your organization already has unlimited usage credits. No request needed.',
       }
     }
 
@@ -54,7 +54,7 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
       if (eligibility?.is_allowed === false) {
         return {
           type: 'message',
-          value: 'Please contact your admin to manage extra usage settings.',
+          value: 'Please contact your admin to manage usage credit settings.',
         }
       }
     } catch (error) {
@@ -71,7 +71,7 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
         return {
           type: 'message',
           value:
-            'You have already submitted a request for extra usage to your admin.',
+            'You have already submitted a request for usage credits to your admin.',
         }
       }
     } catch (error) {
@@ -87,8 +87,8 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
       return {
         type: 'message',
         value: extraUsage?.is_enabled
-          ? 'Request sent to your admin to increase extra usage.'
-          : 'Request sent to your admin to enable extra usage.',
+          ? 'Request sent to your admin to increase usage credits.'
+          : 'Request sent to your admin to enable usage credits.',
       }
     } catch (error) {
       logError(error as Error)
@@ -97,7 +97,7 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
 
     return {
       type: 'message',
-      value: 'Please contact your admin to manage extra usage settings.',
+      value: 'Please contact your admin to manage usage credit settings.',
     }
   }
 
@@ -112,7 +112,7 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
     logError(error as Error)
     return {
       type: 'message',
-      value: `Failed to open browser. Please visit ${url} to manage extra usage.`,
+      value: `Failed to open browser. Please visit ${url} to manage usage credits.`,
     }
   }
 }

@@ -198,7 +198,7 @@ export function FastModePicker(t0) {
   }
   let t12;
   if ($[26] !== handleCancel || $[27] !== t10 || $[28] !== t9) {
-    t12 = <Dialog title={title} subtitle={`High-speed mode for ${FAST_MODE_MODEL_DISPLAY}. Billed as extra usage at a premium rate. Separate rate limits apply.`} onCancel={handleCancel} color="fastMode" inputGuide={t9}>{t10}{t11}</Dialog>;
+    t12 = <Dialog title={title} subtitle={`High-speed mode for ${FAST_MODE_MODEL_DISPLAY}. Billed as usage credits at a premium rate. Separate rate limits apply.`} onCancel={handleCancel} color="fastMode" inputGuide={t9}>{t10}{t11}</Dialog>;
     $[26] = handleCancel;
     $[27] = t10;
     $[28] = t9;

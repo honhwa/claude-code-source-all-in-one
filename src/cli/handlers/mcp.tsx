@@ -13,7 +13,7 @@ import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
 import { clearMcpClientConfig, clearServerTokensFromLocalStorage, getMcpClientConfig, readClientSecret, saveMcpClientSecret } from '../../services/mcp/auth.js';
 import { connectToServer, getMcpServerConnectionBatchSize } from '../../services/mcp/client.js';
-import { addMcpConfig, getAllMcpConfigs, getMcpConfigByName, getMcpConfigsByScope, removeMcpConfig } from '../../services/mcp/config.js';
+import { addMcpConfig, getAllMcpConfigErrors, getAllMcpConfigs, getMcpConfigByName, getMcpConfigsByScope, removeMcpConfig } from '../../services/mcp/config.js';
 import type { ConfigScope, ScopedMcpServerConfig } from '../../services/mcp/types.js';
 import { describeMcpConfigFilePath, ensureConfigScope, getScopeLabel } from '../../services/mcp/utils.js';
 import { AppStateProvider } from '../../state/AppState.js';
@@ -146,6 +146,28 @@ export async function mcpListHandler(): Promise<void> {
   const {
     servers: configs
   } = await getAllMcpConfigs();
+  // Upstream 2.1.144: surface configuration errors. Previously a malformed
+  // .mcp.json (most commonly: VS Code's `"servers"` key instead of
+  // `"mcpServers"`) returned zero servers AND zero errors from the public
+  // API, so `claude mcp list` printed "No MCP servers configured" and the
+  // user had no signal that the file even existed. getAllMcpConfigErrors
+  // walks every editable scope's .mcp.json parse output.
+  const configErrors = getAllMcpConfigErrors();
+  if (configErrors.length > 0) {
+    // biome-ignore lint/suspicious/noConsole:: intentional console output
+    console.log(`${configErrors.length} configuration ${configErrors.length === 1 ? 'error' : 'errors'} found in .mcp.json files:\n`);
+    for (const err of configErrors) {
+      const location = err.file ? `${err.file} (${err.path})` : err.path;
+      // biome-ignore lint/suspicious/noConsole:: intentional console output
+      console.log(`  • ${location}: ${err.message}`);
+      if (err.suggestion) {
+        // biome-ignore lint/suspicious/noConsole:: intentional console output
+        console.log(`      ${err.suggestion}`);
+      }
+    }
+    // biome-ignore lint/suspicious/noConsole:: intentional console output
+    console.log('');
+  }
   if (Object.keys(configs).length === 0) {
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log('No MCP servers configured. Use `claude mcp add` to add a server.');

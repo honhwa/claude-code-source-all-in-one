@@ -767,9 +767,22 @@ async function createUltraCompressedJPEG(
  * @returns Media type string (e.g., 'image/png', 'image/jpeg') or 'image/png' as default
  */
 export function detectImageFormatFromBuffer(buffer: Buffer): ImageMediaType {
-  if (buffer.length < 4) return 'image/png' // default
+  return matchImageMagicBytes(buffer) ?? 'image/png'
+}
 
-  // Check PNG signature
+/**
+ * Same magic-byte sniff as `detectImageFormatFromBuffer`, but returns
+ * `null` when the buffer doesn't match any supported image format instead
+ * of silently falling back to `image/png`. Use this when the caller wants
+ * to detect "this looks like an image extension but the bytes say
+ * otherwise" — e.g. an HTML page saved as `.png`, where treating the
+ * default PNG fallback as truth would feed garbage to the API and
+ * produce an unrecoverable conversation (upstream 2.1.144).
+ */
+export function matchImageMagicBytes(buffer: Buffer): ImageMediaType | null {
+  if (buffer.length < 4) return null
+
+  // PNG signature
   if (
     buffer[0] === 0x89 &&
     buffer[1] === 0x50 &&
@@ -779,36 +792,32 @@ export function detectImageFormatFromBuffer(buffer: Buffer): ImageMediaType {
     return 'image/png'
   }
 
-  // Check JPEG signature (FFD8FF)
+  // JPEG signature (FFD8FF)
   if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return 'image/jpeg'
   }
 
-  // Check GIF signature (GIF87a or GIF89a)
+  // GIF signature (GIF87a or GIF89a)
   if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
     return 'image/gif'
   }
 
-  // Check WebP signature (RIFF....WEBP)
+  // WebP signature (RIFF....WEBP)
   if (
     buffer[0] === 0x52 &&
     buffer[1] === 0x49 &&
     buffer[2] === 0x46 &&
-    buffer[3] === 0x46
+    buffer[3] === 0x46 &&
+    buffer.length >= 12 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
   ) {
-    if (
-      buffer.length >= 12 &&
-      buffer[8] === 0x57 &&
-      buffer[9] === 0x45 &&
-      buffer[10] === 0x42 &&
-      buffer[11] === 0x50
-    ) {
-      return 'image/webp'
-    }
+    return 'image/webp'
   }
 
-  // Default to PNG if unknown
-  return 'image/png'
+  return null
 }
 
 /**

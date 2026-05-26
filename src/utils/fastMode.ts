@@ -61,7 +61,7 @@ function getDisabledReasonMessage(
       return 'Fast mode has been disabled by your organization'
     case 'extra_usage_disabled':
       // Only OAuth users can have extra_usage_disabled; console users don't have this concept
-      return 'Fast mode requires extra usage billing · /extra-usage to enable'
+      return 'Fast mode requires usage credit billing · /usage-credits to enable'
     case 'network_error':
       return 'Fast mode unavailable due to network connectivity issues'
     case 'unknown':
@@ -263,23 +263,23 @@ export const onFastModeOverageRejection = overageRejection.subscribe
 function getOverageDisabledMessage(reason: string | null): string {
   switch (reason) {
     case 'out_of_credits':
-      return 'Fast mode disabled · extra usage credits exhausted'
+      return 'Fast mode disabled · usage credits exhausted'
     case 'org_level_disabled':
     case 'org_service_level_disabled':
-      return 'Fast mode disabled · extra usage disabled by your organization'
+      return 'Fast mode disabled · usage credits disabled by your organization'
     case 'org_level_disabled_until':
-      return 'Fast mode disabled · extra usage spending cap reached'
+      return 'Fast mode disabled · usage credit spending cap reached'
     case 'member_level_disabled':
-      return 'Fast mode disabled · extra usage disabled for your account'
+      return 'Fast mode disabled · usage credits disabled for your account'
     case 'seat_tier_level_disabled':
     case 'seat_tier_zero_credit_limit':
     case 'member_zero_credit_limit':
-      return 'Fast mode disabled · extra usage not available for your plan'
+      return 'Fast mode disabled · usage credits not available for your plan'
     case 'overage_not_provisioned':
     case 'no_limits_configured':
-      return 'Fast mode requires extra usage billing · /extra-usage to enable'
+      return 'Fast mode requires usage credit billing · /usage-credits to enable'
     default:
-      return 'Fast mode disabled · extra usage not available'
+      return 'Fast mode disabled · usage credits not available'
   }
 }
 

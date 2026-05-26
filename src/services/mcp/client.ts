@@ -1816,26 +1816,62 @@ export const fetchToolsForClient = memoizeWithLRU(
       // the server showing 0 tools forever. Persistent failures still throw,
       // and the outer catch logs a clear "Failed to fetch tools" — the UI
       // surfaces this as "connected · tools fetch failed" in /mcp.
-      let result: ListToolsResult
-      try {
-        result = (await client.client.request(
-          { method: 'tools/list' },
-          ListToolsResultSchema,
-        )) as ListToolsResult
-      } catch (firstError) {
+      //
+      // Capture client.client / client.name before the nested function — TS's
+      // control-flow narrowing of `client.type === 'connected'` doesn't
+      // propagate into a closure, so accessing `client.client` inside
+      // fetchOnePage would re-widen to the union type.
+      const connectedRpc = client.client
+      const serverName = client.name
+      async function fetchOnePage(
+        cursor: string | undefined,
+      ): Promise<ListToolsResult> {
+        const params = cursor !== undefined ? { cursor } : undefined
+        try {
+          return (await connectedRpc.request(
+            { method: 'tools/list', ...(params ? { params } : {}) },
+            ListToolsResultSchema,
+          )) as ListToolsResult
+        } catch (firstError) {
+          logMCPDebug(
+            serverName,
+            `tools/list${cursor !== undefined ? ` (cursor=${cursor})` : ''} failed (attempt 1): ${errorMessage(firstError)}; retrying once`,
+          )
+          await new Promise(resolve => setTimeout(resolve, 250))
+          return (await connectedRpc.request(
+            { method: 'tools/list', ...(params ? { params } : {}) },
+            ListToolsResultSchema,
+          )) as ListToolsResult
+        }
+      }
+
+      // Upstream 2.1.144: walk the `nextCursor` chain so paginated servers
+      // (MCP spec §"Pagination") return all tools, not just the first page.
+      // Bounded to prevent a misbehaving server from looping forever:
+      // MAX_PAGES * typical-page-size is well past any realistic tool count.
+      // If we hit the cap, log and stop — the server is buggy and the user
+      // will at least get a partial list rather than a runaway loop.
+      const MAX_TOOL_LIST_PAGES = 50
+      const collectedTools: ListToolsResult['tools'] = []
+      let cursor: string | undefined
+      for (let page = 0; page < MAX_TOOL_LIST_PAGES; page++) {
+        const result = await fetchOnePage(cursor)
+        collectedTools.push(...result.tools)
+        if (!result.nextCursor) {
+          cursor = undefined
+          break
+        }
+        cursor = result.nextCursor
+      }
+      if (cursor !== undefined) {
         logMCPDebug(
           client.name,
-          `tools/list failed (attempt 1): ${errorMessage(firstError)}; retrying once`,
+          `tools/list pagination cap (${MAX_TOOL_LIST_PAGES} pages) reached — server is still returning nextCursor; truncating`,
         )
-        await new Promise(resolve => setTimeout(resolve, 250))
-        result = (await client.client.request(
-          { method: 'tools/list' },
-          ListToolsResultSchema,
-        )) as ListToolsResult
       }
 
       // Sanitize tool data from MCP server
-      const toolsToProcess = recursivelySanitizeUnicode(result.tools)
+      const toolsToProcess = recursivelySanitizeUnicode(collectedTools)
 
       // Check if we should skip the mcp__ prefix for SDK MCP servers
       const skipPrefix =
@@ -2610,9 +2646,27 @@ export async function transformResultContent(
       )
     }
     case 'image': {
-      // Resize and compress image data, enforcing API dimension limits
       const imageBuffer = Buffer.from(String(resultContent.data), 'base64')
-      const ext = resultContent.mimeType?.split('/')[1] || 'png'
+      // Upstream 2.1.144: the Anthropic API only accepts the four MIME types
+      // in IMAGE_MIME_TYPES (jpeg/png/gif/webp). MCP servers occasionally
+      // return image/svg+xml, image/heic, image/tiff, etc.; before this
+      // guard those slipped through as image blocks and the API rejected
+      // the whole request, leaving the conversation in an unrecoverable
+      // state (the bad block stays in history and every subsequent turn
+      // fails the same way). Mirrors how the `resource` branch below
+      // already handles non-image MIMEs — persist to disk and reference
+      // from a text block so the model still gets the content.
+      const mimeType = resultContent.mimeType
+      if (!mimeType || !IMAGE_MIME_TYPES.has(mimeType)) {
+        return await persistBlobToTextBlock(
+          imageBuffer,
+          mimeType,
+          serverName,
+          `[Image from ${serverName} with unsupported MIME type] `,
+        )
+      }
+      // Resize and compress image data, enforcing API dimension limits
+      const ext = mimeType.split('/')[1] || 'png'
       const resized = await maybeResizeAndDownsampleImageBuffer(
         imageBuffer,
         imageBuffer.length,

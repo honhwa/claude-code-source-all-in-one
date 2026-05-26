@@ -46,6 +46,7 @@ import {
   detectImageFormatFromBuffer,
   type ImageDimensions,
   ImageResizeError,
+  matchImageMagicBytes,
   maybeResizeAndDownsampleImageBuffer,
 } from '../../utils/imageResizer.js'
 import { lazySchema } from '../../utils/lazySchema.js'
@@ -852,30 +853,48 @@ async function callInner(
 
   // --- Image (single read, no double-read) ---
   if (IMAGE_EXTENSIONS.has(ext)) {
-    // Images have their own size limits (token budget + compression) —
-    // don't apply the text maxSizeBytes cap.
-    const data = await readImageWithTokenBudget(resolvedFilePath, maxTokens)
-    context.nestedMemoryAttachmentTriggers?.add(fullFilePath)
+    // Upstream 2.1.144: an HTML page saved as foo.png (or any non-image
+    // bytes under an image extension) used to be treated as a corrupt PNG
+    // and forwarded to the API as an image block, where decode failed and
+    // the bad block stayed in conversation history — every subsequent
+    // turn re-failed on the same block. Peek at the magic bytes first;
+    // when they don't match a real image format, fall through to text
+    // reading so the model sees the actual file contents.
+    //
+    // 16 bytes is enough for every signature checked by matchImageMagicBytes
+    // (the longest match — WebP — needs 12). Reading just the header keeps
+    // a multi-MB HTML-with-.png from blowing memory.
+    const headerBuffer = await getFsImplementation().readFileBytes(
+      resolvedFilePath,
+      16,
+    )
+    if (matchImageMagicBytes(headerBuffer) !== null) {
+      // Images have their own size limits (token budget + compression) —
+      // don't apply the text maxSizeBytes cap.
+      const data = await readImageWithTokenBudget(resolvedFilePath, maxTokens)
+      context.nestedMemoryAttachmentTriggers?.add(fullFilePath)
 
-    logFileOperation({
-      operation: 'read',
-      tool: 'FileReadTool',
-      filePath: fullFilePath,
-      content: data.file.base64,
-    })
+      logFileOperation({
+        operation: 'read',
+        tool: 'FileReadTool',
+        filePath: fullFilePath,
+        content: data.file.base64,
+      })
 
-    const metadataText = data.file.dimensions
-      ? createImageMetadataText(data.file.dimensions)
-      : null
+      const metadataText = data.file.dimensions
+        ? createImageMetadataText(data.file.dimensions)
+        : null
 
-    return {
-      data,
-      ...(metadataText && {
-        newMessages: [
-          createUserMessage({ content: metadataText, isMeta: true }),
-        ],
-      }),
+      return {
+        data,
+        ...(metadataText && {
+          newMessages: [
+            createUserMessage({ content: metadataText, isMeta: true }),
+          ],
+        }),
+      }
     }
+    // Magic bytes don't match — fall through to text reading below.
   }
 
   // --- PDF ---

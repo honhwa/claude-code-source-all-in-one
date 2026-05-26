@@ -1544,14 +1544,19 @@ async function loadAndCacheMarketplace(
             }
           }
         } else {
-          // SSH not configured, go straight to HTTPS
+          // SSH not configured (or PREFER_HTTPS=1 forced the skip), go
+          // straight to HTTPS
           safeCallProgress(
             onProgress,
-            `SSH not configured, cloning via HTTPS: ${httpsUrl}`,
+            preferHttps
+              ? `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1 set, cloning via HTTPS: ${httpsUrl}`
+              : `SSH not configured, cloning via HTTPS: ${httpsUrl}`,
           )
 
           logForDebugging(
-            `SSH not configured for GitHub, using HTTPS for ${source.repo}`,
+            preferHttps
+              ? `CLAUDE_CODE_PLUGIN_PREFER_HTTPS set, using HTTPS for ${source.repo}`
+              : `SSH not configured for GitHub, using HTTPS for ${source.repo}`,
             { level: 'info' },
           )
 
@@ -1566,40 +1571,57 @@ async function loadAndCacheMarketplace(
           } catch (err) {
             lastError = toError(err)
 
-            // Always try SSH as fallback for ANY HTTPS failure
             // Log HTTPS failure for monitoring
             logError(lastError)
 
-            // HTTPS failed, try SSH as fallback
-            safeCallProgress(
-              onProgress,
-              `HTTPS clone failed, retrying with SSH: ${sshUrl}`,
-            )
-
-            logForDebugging(
-              `HTTPS clone failed for ${source.repo} (${lastError.message}), falling back to SSH`,
-              { level: 'info' },
-            )
-
-            // Clean up failed HTTPS attempt if it created anything
-            await fs.rm(temporaryCachePath, { recursive: true, force: true })
-
-            // Try SSH
-            try {
-              await cacheMarketplaceFromGit(
-                sshUrl,
-                temporaryCachePath,
-                source.ref,
-                source.sparsePaths,
+            // Upstream 2.1.144: respect CLAUDE_CODE_PLUGIN_PREFER_HTTPS in
+            // marketplace add/update. When the operator explicitly opted
+            // into HTTPS (CI / sandboxes / corporate networks where SSH
+            // keys aren't available), the SSH fallback would prompt for a
+            // passphrase or hang on key negotiation — exactly the behavior
+            // PREFER_HTTPS was set to avoid. Don't try SSH in that case;
+            // surface the HTTPS error as the final error.
+            if (preferHttps) {
+              safeCallProgress(
                 onProgress,
+                `HTTPS clone failed and CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1 set; not falling back to SSH.`,
               )
-              lastError = null // Success!
-            } catch (sshErr) {
-              // SSH also failed - use SSH error as the final error
-              lastError = toError(sshErr)
+              logForDebugging(
+                `HTTPS clone failed for ${source.repo} (${lastError.message}); SSH fallback skipped due to CLAUDE_CODE_PLUGIN_PREFER_HTTPS`,
+                { level: 'info' },
+              )
+            } else {
+              // HTTPS failed, try SSH as fallback
+              safeCallProgress(
+                onProgress,
+                `HTTPS clone failed, retrying with SSH: ${sshUrl}`,
+              )
 
-              // Log SSH failure for monitoring (both HTTPS and SSH failed)
-              logError(lastError)
+              logForDebugging(
+                `HTTPS clone failed for ${source.repo} (${lastError.message}), falling back to SSH`,
+                { level: 'info' },
+              )
+
+              // Clean up failed HTTPS attempt if it created anything
+              await fs.rm(temporaryCachePath, { recursive: true, force: true })
+
+              // Try SSH
+              try {
+                await cacheMarketplaceFromGit(
+                  sshUrl,
+                  temporaryCachePath,
+                  source.ref,
+                  source.sparsePaths,
+                  onProgress,
+                )
+                lastError = null // Success!
+              } catch (sshErr) {
+                // SSH also failed - use SSH error as the final error
+                lastError = toError(sshErr)
+
+                // Log SSH failure for monitoring (both HTTPS and SSH failed)
+                logError(lastError)
+              }
             }
           }
         }

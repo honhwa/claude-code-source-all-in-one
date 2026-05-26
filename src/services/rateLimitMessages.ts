@@ -18,11 +18,19 @@ const FEEDBACK_CHANNEL_ANT = '#briarpatch-cc'
  * All possible rate limit error message prefixes
  * Export this to avoid fragile string matching in UI components
  */
+// Upstream 2.1.144 rename: "extra usage" → "usage credits" in user-facing
+// copy. The OLD prefixes stay in the list so any session that's actively
+// rendering a pre-rename string (e.g. resumed from a transcript persisted by
+// 2.1.143) still matches isRateLimitErrorMessage and gets the right UI
+// treatment instead of falling through as a generic error.
 export const RATE_LIMIT_ERROR_PREFIXES = [
   "You've hit your",
   "You've used",
-  "You're now using extra usage",
+  "You're now using usage credits",
   "You're close to",
+  "You're out of usage credits",
+  // Legacy (pre-2.1.144) — keep for transcript replay / cross-version sessions
+  "You're now using extra usage",
   "You're out of extra usage",
 ] as const
 
@@ -52,7 +60,7 @@ export function getRateLimitMessage(
     // Show warning if approaching overage spending limit
     if (limits.overageStatus === 'allowed_warning') {
       return {
-        message: "You're close to your extra usage spending limit",
+        message: "You're close to your usage credit spending limit",
         severity: 'warning',
       }
     }
@@ -166,7 +174,7 @@ function getLimitReachedText(limits: ClaudeAILimits, model: string): string {
     }
 
     if (limits.overageDisabledReason === 'out_of_credits') {
-      return `You're out of extra usage${overageResetMessage}`
+      return `You're out of usage credits${overageResetMessage}`
     }
 
     return formatLimitReachedText('limit', overageResetMessage, model)
@@ -212,7 +220,7 @@ function getEarlyWarningText(limits: ClaudeAILimits): string | null {
       limitName = 'Sonnet limit'
       break
     case 'overage':
-      limitName = 'extra usage'
+      limitName = 'usage credits'
       break
     case undefined:
       return null
@@ -240,8 +248,9 @@ function getEarlyWarningText(limits: ClaudeAILimits): string | null {
   }
 
   if (limits.rateLimitType === 'overage') {
-    // For the "Approaching <x>" verbiage, "extra usage limit" makes more sense than "extra usage"
-    limitName += ' limit'
+    // For the "Approaching <x>" verbiage, "usage credit limit" reads
+    // better than "usage credits".
+    limitName = 'usage credit limit'
   }
 
   if (resetTime) {
@@ -271,7 +280,7 @@ function getWarningUpsellText(
     // Only show if overage provisioning is allowed for this org type (e.g., not AWS marketplace)
     if (subscriptionType === 'team' || subscriptionType === 'enterprise') {
       if (!hasExtraUsageEnabled && isOverageProvisioningAllowed()) {
-        return '/extra-usage to request more'
+        return '/usage-credits to request more'
       }
       // Teams/Enterprise with overages enabled or unsupported billing type don't need upsell
       return null
@@ -287,7 +296,7 @@ function getWarningUpsellText(
   if (rateLimitType === 'overage') {
     if (subscriptionType === 'team' || subscriptionType === 'enterprise') {
       if (!hasExtraUsageEnabled && isOverageProvisioningAllowed()) {
-        return '/extra-usage to request more'
+        return '/usage-credits to request more'
       }
     }
   }
@@ -321,13 +330,13 @@ export function getUsingOverageText(limits: ClaudeAILimits): string {
   }
 
   if (!limitName) {
-    return 'Now using extra usage'
+    return 'Now using usage credits'
   }
 
   const resetMessage = resetTime
     ? ` · Your ${limitName} resets ${resetTime}`
     : ''
-  return `You're now using extra usage${resetMessage}`
+  return `You're now using usage credits${resetMessage}`
 }
 
 function formatLimitReachedText(
