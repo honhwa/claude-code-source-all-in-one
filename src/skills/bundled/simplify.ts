@@ -53,8 +53,20 @@ When done, briefly summarize what was fixed (or confirm the code was already cle
 `
 
 export function registerSimplifySkill(): void {
+  // Upstream 2.1.147 renamed `/simplify` → `/code-review` and rewrote the
+  // body (correctness bugs at chosen effort levels; `--comment` posts to
+  // GitHub). We don't have the new prompt body, so the safest sync is:
+  //   1. Keep the existing reuse/quality/efficiency prompt (the old
+  //      behavior — it's a useful skill on its own and removing it would
+  //      regress users mid-session).
+  //   2. Surface `/code-review` as the primary name so users running the
+  //      new name from upstream docs land here instead of "unknown skill".
+  //   3. Keep `simplify` as an alias for muscle-memory and back-compat.
+  // The CHANGELOG documents that the *behavior* change (effort levels +
+  // --comment + correctness focus) wasn't ported.
   registerBundledSkill({
-    name: 'simplify',
+    name: 'code-review',
+    aliases: ['simplify'],
     description:
       'Review changed code for reuse, quality, and efficiency, then fix any issues found.',
     userInvocable: true,

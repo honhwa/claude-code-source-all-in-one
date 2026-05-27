@@ -1943,12 +1943,41 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
     return { valid: true }
   }
 
+  // Upstream 2.1.147: enforce force-login restrictions against 3P provider
+  // and API-key sessions too. The previous early-return-true here when
+  // !isAnthropicAuthEnabled() (Bedrock/Vertex/Foundry, external API key,
+  // external auth token) was the bypass — an enterprise admin sets
+  // `forceLoginOrgUUID` expecting "this machine can only run sessions
+  // authenticated against my org," but the user could opt out by setting
+  // CLAUDE_CODE_USE_BEDROCK=1 or ANTHROPIC_API_KEY=... and route through a
+  // gateway the admin doesn't control. Now: when either force-login
+  // setting is present AND we're on a non-OAuth path, refuse — there's no
+  // way to validate the org from a 3P/API-key session, so we fail closed.
+  const policySettings = getSettingsForSource('policySettings')
+  const requiredOrgUuid = policySettings?.forceLoginOrgUUID
+  const requiredMethod = policySettings?.forceLoginMethod
+  const hasForceLoginConstraint =
+    requiredOrgUuid !== undefined || requiredMethod !== undefined
+
   if (!isAnthropicAuthEnabled()) {
-    return { valid: true }
+    if (!hasForceLoginConstraint) {
+      return { valid: true }
+    }
+    const reason = requiredOrgUuid
+      ? `Managed settings require organization ${requiredOrgUuid}`
+      : `Managed settings require login method "${requiredMethod}"`
+    return {
+      valid: false,
+      message:
+        `${reason}, but this session is using a non-OAuth authentication path ` +
+        `(third-party provider or external API key/auth token) that cannot be ` +
+        `validated against an Anthropic organization. Unset CLAUDE_CODE_USE_BEDROCK ` +
+        `/ CLAUDE_CODE_USE_VERTEX / CLAUDE_CODE_USE_FOUNDRY / ANTHROPIC_API_KEY / ` +
+        `ANTHROPIC_AUTH_TOKEN and run \`claude auth login\` with the required ` +
+        `organization.`,
+    }
   }
 
-  const requiredOrgUuid =
-    getSettingsForSource('policySettings')?.forceLoginOrgUUID
   if (!requiredOrgUuid) {
     return { valid: true }
   }

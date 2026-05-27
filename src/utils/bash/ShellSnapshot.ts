@@ -200,6 +200,15 @@ function getUserSnapshotContent(configFile: string): string {
   let content = ''
 
   // User functions
+  // Upstream 2.1.147: previously this filtered names matching `^_[^_]` to skip
+  // shell-completion helpers, but that also dropped genuine user functions
+  // whose names happen to start with a single underscore (a common
+  // convention for "private" helpers, e.g. `_my_dotfile_helper`). Aliases
+  // referencing those helpers — and the user's own muscle-memory commands —
+  // broke whenever Claude Code spawned a Bash subprocess from the snapshot.
+  // We now capture EVERY user function. Completion helpers come along for
+  // the ride; they're inert outside an interactive completion context, so
+  // there's no observable cost beyond a slightly larger snapshot file.
   if (isZsh) {
     content += `
       echo "# Functions" >> "$SNAPSHOT_FILE"
@@ -207,9 +216,8 @@ function getUserSnapshotContent(configFile: string): string {
       # Force autoload all functions first
       typeset -f > /dev/null 2>&1
 
-      # Now get user function names - filter completion functions (single underscore prefix)
-      # but keep double-underscore helpers (e.g. __zsh_like_cd from mise, __pyenv_init)
-      typeset +f | grep -vE '^_[^_]' | while read func; do
+      # Now get user function names (no _-prefix filter — see comment above)
+      typeset +f | while read func; do
         typeset -f "$func" >> "$SNAPSHOT_FILE"
       done
     `
@@ -220,9 +228,8 @@ function getUserSnapshotContent(configFile: string): string {
       # Force autoload all functions first
       declare -f > /dev/null 2>&1
 
-      # Now get user function names - filter completion functions (single underscore prefix)
-      # but keep double-underscore helpers (e.g. __zsh_like_cd from mise, __pyenv_init)
-      declare -F | cut -d' ' -f3 | grep -vE '^_[^_]' | while read func; do
+      # Now get user function names (no _-prefix filter — see comment above)
+      declare -F | cut -d' ' -f3 | while read func; do
         # Encode the function to base64, preserving all special characters
         encoded_func=$(declare -f "$func" | base64 )
         # Write the function definition to the snapshot

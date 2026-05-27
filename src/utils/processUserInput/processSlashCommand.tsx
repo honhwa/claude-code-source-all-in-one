@@ -355,6 +355,16 @@ export async function processSlashCommand(inputString: string, precedingInputBlo
         input: commandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
       const unknownMessage = `Unknown skill: ${commandName}`;
+      // Upstream 2.1.147: in headless / SDK mode the user message is the
+      // only signal an unknown command produces. Text output mode prints
+      // nothing (no assistant response is generated; shouldQuery is false),
+      // and stream-json consumers see the synthetic user message but it's
+      // indistinguishable from a normal prompt being echoed back. Write to
+      // stderr so the user sees the failure regardless of --output-format,
+      // matching how other CLI errors surface (main.tsx ~:489 et al).
+      if (context.options.isNonInteractiveSession) {
+        process.stderr.write(`${unknownMessage}\n`);
+      }
       return {
         messages: [createSyntheticUserCaveatMessage(), ...attachmentMessages, createUserMessage({
           content: prepareUserContent({

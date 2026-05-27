@@ -28,6 +28,7 @@ import {
   type JSONRPCMessage,
   type ListPromptsResult,
   ListPromptsResultSchema,
+  type ListResourcesResult,
   ListResourcesResultSchema,
   ListRootsRequestSchema,
   type ListToolsResult,
@@ -2143,15 +2144,40 @@ export const fetchResourcesForClient = memoizeWithLRU(
         return []
       }
 
-      const result = await client.client.request(
-        { method: 'resources/list' },
-        ListResourcesResultSchema,
-      )
+      // Upstream 2.1.147: walk the nextCursor chain so paginated servers
+      // return every resource, not just the first page. Same shape as the
+      // tools/list pagination added in 2.1.144 — see that block for the
+      // 50-page safety cap and cap-hit logging rationale.
+      const MAX_PAGES = 50
+      const collected: typeof result.resources = []
+      let result: ListResourcesResult
+      let cursor: string | undefined
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const params = cursor !== undefined ? { cursor } : undefined
+        result = (await client.client.request(
+          { method: 'resources/list', ...(params ? { params } : {}) },
+          ListResourcesResultSchema,
+        )) as ListResourcesResult
+        if (result.resources) {
+          collected.push(...result.resources)
+        }
+        if (!result.nextCursor) {
+          cursor = undefined
+          break
+        }
+        cursor = result.nextCursor
+      }
+      if (cursor !== undefined) {
+        logMCPDebug(
+          client.name,
+          `resources/list pagination cap (${MAX_PAGES} pages) reached — server is still returning nextCursor; truncating`,
+        )
+      }
 
-      if (!result.resources) return []
+      if (collected.length === 0) return []
 
       // Add server name to each resource
-      return result.resources.map(resource => ({
+      return collected.map(resource => ({
         ...resource,
         server: client.name,
       }))
@@ -2176,16 +2202,40 @@ export const fetchCommandsForClient = memoizeWithLRU(
         return []
       }
 
-      // Request prompts list from client
-      const result = (await client.client.request(
-        { method: 'prompts/list' },
-        ListPromptsResultSchema,
-      )) as ListPromptsResult
+      // Upstream 2.1.147: walk the nextCursor chain — same shape as the
+      // resources/list pagination above and the tools/list pagination from
+      // 2.1.144. Servers with more than one page of prompts (e.g. a
+      // workspace with hundreds of saved query templates) were silently
+      // dropping everything past page 1.
+      const MAX_PAGES = 50
+      const collectedPrompts: ListPromptsResult['prompts'] = []
+      let cursor: string | undefined
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const params = cursor !== undefined ? { cursor } : undefined
+        const pageResult = (await client.client.request(
+          { method: 'prompts/list', ...(params ? { params } : {}) },
+          ListPromptsResultSchema,
+        )) as ListPromptsResult
+        if (pageResult.prompts) {
+          collectedPrompts.push(...pageResult.prompts)
+        }
+        if (!pageResult.nextCursor) {
+          cursor = undefined
+          break
+        }
+        cursor = pageResult.nextCursor
+      }
+      if (cursor !== undefined) {
+        logMCPDebug(
+          client.name,
+          `prompts/list pagination cap (${MAX_PAGES} pages) reached — server is still returning nextCursor; truncating`,
+        )
+      }
 
-      if (!result.prompts) return []
+      if (collectedPrompts.length === 0) return []
 
       // Sanitize prompt data from MCP server
-      const promptsToProcess = recursivelySanitizeUnicode(result.prompts)
+      const promptsToProcess = recursivelySanitizeUnicode(collectedPrompts)
 
       // Convert MCP prompts to our Command format
       return promptsToProcess.map(prompt => {

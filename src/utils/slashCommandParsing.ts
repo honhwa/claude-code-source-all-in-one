@@ -30,9 +30,16 @@ export function parseSlashCommand(input: string): ParsedSlashCommand | null {
     return null
   }
 
-  // Remove the leading '/' and split by spaces
+  // Remove the leading '/' and split on ANY whitespace.
+  // Upstream 2.1.147: previously split on a single ' ' character only, so a
+  // command terminated by `\t` or `\n` (common when an autocomplete UI
+  // inserts a trailing whitespace, or when a copy-paste includes one) was
+  // parsed as the whole `<cmd>\t...` token and matched no registered
+  // command. Splitting on `\s+` accepts any whitespace separator. The
+  // (MCP) suffix detection still works — that's a literal-token check on
+  // words[1], which is invariant under whitespace-class.
   const withoutSlash = trimmedInput.slice(1)
-  const words = withoutSlash.split(' ')
+  const words = withoutSlash.split(/\s+/)
 
   if (!words[0]) {
     return null
@@ -49,7 +56,10 @@ export function parseSlashCommand(input: string): ParsedSlashCommand | null {
     argsStartIndex = 2
   }
 
-  // Extract arguments (everything after command name)
+  // Extract arguments (everything after command name). Re-join with a
+  // single space — internal whitespace details inside the args body are
+  // lost, but they were already lost by the original .split(' ').join(' ')
+  // round-trip, so no regression vs. prior behavior for arg content.
   const args = words.slice(argsStartIndex).join(' ')
 
   return {

@@ -360,6 +360,21 @@ async function addToPromptHistory(
       ? { display: command, pastedContents: {} }
       : command
 
+  // Upstream 2.1.147: skip the write when the new entry's display matches
+  // the most-recent in-memory entry. The common case is recalling a prompt
+  // via Up-arrow and submitting it again — without this guard the history
+  // file accumulates dozens of duplicate "rerun the tests" / "explain"
+  // entries that all collapse to one in the ctrl+r picker but waste disk
+  // and slow the reverse-line read on startup. Session-local (lastAddedEntry
+  // is module-state); first prompt of a new session that duplicates the
+  // last prompt of the previous session still records — that's the
+  // tradeoff vs. doing a disk-read on every submit. The `paste` payload is
+  // ignored intentionally: an identical display string with different
+  // referenced pastes is functionally the same prompt for the picker.
+  if (lastAddedEntry && lastAddedEntry.display === entry.display) {
+    return
+  }
+
   const storedPastedContents: Record<number, StoredPastedContent> = {}
   if (entry.pastedContents) {
     for (const [id, content] of Object.entries(entry.pastedContents)) {
