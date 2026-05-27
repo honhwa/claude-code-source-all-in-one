@@ -1,4 +1,4 @@
-import { getMainThreadAgentType } from '../bootstrap/state.js'
+import { getMainThreadAgentType, getSessionId } from '../bootstrap/state.js'
 import type { HookResultMessage } from '../types/message.js'
 import { createAttachmentMessage } from './attachments.js'
 import { logForDebugging } from './debug.js'
@@ -9,6 +9,10 @@ import { shouldAllowManagedHooksOnly } from './hooks/hooksConfigSnapshot.js'
 import { executeSessionStartHooks, executeSetupHooks } from './hooks.js'
 import { logError } from './log.js'
 import { loadPluginHooks } from './plugins/loadPluginHooks.js'
+import { cacheSessionTitle } from './sessionStorage.js'
+// clearSkillCaches is lazy-imported below to avoid a circular dependency
+// between sessionStart.ts → skills/loadSkillsDir.ts (the skill loader
+// itself reads hook config in its activation path).
 
 type SessionStartHooksOptions = {
   sessionId?: string
@@ -152,6 +156,40 @@ export async function processSessionStartHooks(
     }
     if (hookResult.watchPaths && hookResult.watchPaths.length > 0) {
       allWatchPaths.push(...hookResult.watchPaths)
+    }
+    // Upstream 2.1.152: SessionStart hook can request skill-dir re-scan.
+    // clearSkillCaches() invalidates the memoize layer; the next /skill
+    // lookup or command-list build re-walks the skill directories and
+    // picks up anything the hook installed (e.g. a plugin that wrote
+    // a SKILL.md into ~/.claude/skills/). Lazy-imported because the
+    // skills/ module pulls in hook config in its activation path —
+    // top-level import would create a cycle.
+    if (hookResult.reloadSkills) {
+      try {
+        const { clearSkillCaches } = await import('../skills/loadSkillsDir.js')
+        clearSkillCaches()
+        logForDebugging(
+          'SessionStart hook requested skill reload; cleared skill caches',
+        )
+      } catch (error) {
+        logForDebugging(
+          `Failed to reload skills from SessionStart hook: ${error}`,
+          { level: 'warn' },
+        )
+      }
+    }
+    // Upstream 2.1.152: SessionStart hook can override the session title at
+    // startup / resume. cacheSessionTitle persists the title via
+    // sessionStorage so /resume picker, agent view, and the title-derive
+    // path all see it as the explicit user-set value.
+    if (hookResult.sessionTitle) {
+      const sessionTitleSessionId = sessionId ?? getSessionId()
+      if (sessionTitleSessionId) {
+        cacheSessionTitle(hookResult.sessionTitle)
+        logForDebugging(
+          `SessionStart hook set session title for ${sessionTitleSessionId}: ${hookResult.sessionTitle}`,
+        )
+      }
     }
   }
 

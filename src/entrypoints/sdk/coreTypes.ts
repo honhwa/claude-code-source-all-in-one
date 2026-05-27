@@ -50,6 +50,12 @@ export const HOOK_EVENTS = [
   'InstructionsLoaded',
   'CwdChanged',
   'FileChanged',
+  // Upstream 2.1.152: hooks can transform or hide assistant message text as
+  // it's about to be displayed. Receives the assistant message text and
+  // returns either { displayText: <new text> } to replace it, or
+  // { hide: true } to suppress it. The on-disk transcript is unchanged —
+  // this only affects what the user sees in the REPL.
+  'MessageDisplay',
 ] as const
 
 export const EXIT_REASONS = [

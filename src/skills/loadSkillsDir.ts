@@ -192,6 +192,15 @@ export function parseSkillFrontmatterFields(
   description: string
   hasUserSpecifiedDescription: boolean
   allowedTools: string[]
+  /**
+   * Upstream 2.1.152: skills/slash commands can declare tools to remove
+   * from the model's view while the skill is active. Currently honored
+   * for `context: fork` skills (filters availableTools before runAgent
+   * spawns the sub-agent). For inline skills the field is parsed and
+   * stored but doesn't yet alter the running tool list — a future pass
+   * would need to plumb a mid-turn tool-list mutation.
+   */
+  disallowedTools: string[]
   argumentHint: string | undefined
   argumentNames: string[]
   whenToUse: string | undefined
@@ -242,6 +251,12 @@ export function parseSkillFrontmatterFields(
     allowedTools: parseSlashCommandToolsFromFrontmatter(
       frontmatter['allowed-tools'],
     ),
+    // Accept both kebab-case (`disallowed-tools`) and camelCase
+    // (`disallowedTools`) to match how upstream skill examples are written
+    // and to be consistent with how `allowed-tools` itself is parsed.
+    disallowedTools: parseSlashCommandToolsFromFrontmatter(
+      frontmatter['disallowed-tools'] ?? frontmatter['disallowedTools'],
+    ),
     argumentHint:
       frontmatter['argument-hint'] != null
         ? String(frontmatter['argument-hint'])
@@ -274,6 +289,7 @@ export function createSkillCommand({
   hasUserSpecifiedDescription,
   markdownContent,
   allowedTools,
+  disallowedTools,
   argumentHint,
   argumentNames,
   whenToUse,
@@ -297,6 +313,8 @@ export function createSkillCommand({
   hasUserSpecifiedDescription: boolean
   markdownContent: string
   allowedTools: string[]
+  /** Upstream 2.1.152: see parseSkillFrontmatterFields above */
+  disallowedTools?: string[]
   argumentHint: string | undefined
   argumentNames: string[]
   whenToUse: string | undefined
@@ -320,6 +338,9 @@ export function createSkillCommand({
     description,
     hasUserSpecifiedDescription,
     allowedTools,
+    ...(disallowedTools && disallowedTools.length > 0
+      ? { disallowedTools }
+      : {}),
     argumentHint,
     argNames: argumentNames.length > 0 ? argumentNames : undefined,
     whenToUse,

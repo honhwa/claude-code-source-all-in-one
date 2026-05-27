@@ -281,6 +281,31 @@ async function executeForkedSkill(
   )
 
   try {
+    // Upstream 2.1.152: when the skill's frontmatter declares disallowed-tools,
+    // filter them out of the sub-agent's available tool set so the model can
+    // never see them while the skill is active. Tool names are matched against
+    // the raw rule (so `Bash(git:*)` matches the Bash tool — same shape used
+    // by AgentTool's disallowedTools handling). MCP-prefixed tool names match
+    // exactly. Matches the same parser pattern (`permissionRuleValueFromString`
+    // returns `toolName`) so users can write either `Read` or `Read(...)` and
+    // the right tool drops out.
+    const disallowedToolNameSet = new Set(
+      (command.disallowedTools ?? []).map(spec => {
+        // Inline the parse to avoid pulling permissionRule helpers up the
+        // dependency graph for a single match site. Tool names are simple
+        // identifiers (`Bash`, `Read`, `mcp__foo__bar`); anything after `(`
+        // is a permission scope which doesn't change the underlying tool.
+        const paren = spec.indexOf('(')
+        return paren > 0 ? spec.slice(0, paren) : spec
+      }),
+    )
+    const filteredAvailableTools =
+      disallowedToolNameSet.size > 0
+        ? context.options.tools.filter(
+            tool => !disallowedToolNameSet.has(tool.name),
+          )
+        : context.options.tools
+
     // Run the sub-agent
     for await (const message of runAgent({
       agentDefinition,
@@ -293,7 +318,7 @@ async function executeForkedSkill(
       isAsync: false,
       querySource: 'agent:custom',
       model: command.model as ModelAlias | undefined,
-      availableTools: context.options.tools,
+      availableTools: filteredAvailableTools,
       override: { agentId },
     })) {
       agentMessages.push(message)

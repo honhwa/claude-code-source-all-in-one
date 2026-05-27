@@ -101,6 +101,16 @@ export const syncHookResponseSchema = lazySchema(() =>
             .array(z.string())
             .describe('Absolute paths to watch for FileChanged hooks')
             .optional(),
+          // Upstream 2.1.152: SessionStart hooks can request a skill-directory
+          // re-scan so skills the hook itself just installed become available
+          // in the same session — previously the hook would need the user to
+          // restart Claude Code or run /reload-skills manually.
+          reloadSkills: z.boolean().optional(),
+          // Upstream 2.1.152: SessionStart hooks can set the session title at
+          // startup (and on resume — matches UserPromptSubmit's existing
+          // sessionTitle field above). Useful when the hook can derive a
+          // better title from project context than the auto-generated one.
+          sessionTitle: z.string().optional(),
         }),
         z.object({
           hookEventName: z.literal('Setup'),
@@ -182,6 +192,17 @@ export const syncHookResponseSchema = lazySchema(() =>
         z.object({
           hookEventName: z.literal('WorktreeCreate'),
           worktreePath: z.string(),
+        }),
+        // Upstream 2.1.152: MessageDisplay lets a hook transform or hide
+        // assistant message text as it's about to render. `displayText`
+        // replaces the visible body; `hide: true` suppresses the message
+        // entirely. The on-disk transcript / API history is unaffected —
+        // this is a render-side filter only. Both fields are optional; if
+        // neither is set the original message renders unchanged.
+        z.object({
+          hookEventName: z.literal('MessageDisplay'),
+          displayText: z.string().optional(),
+          hide: z.boolean().optional(),
         }),
       ])
       .optional(),

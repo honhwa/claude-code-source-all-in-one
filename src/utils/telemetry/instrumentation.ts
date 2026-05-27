@@ -483,6 +483,19 @@ export async function initializeTelemetry() {
     }
   }
 
+  // Upstream 2.1.152: opt-in `app.entrypoint` resource attribute so OTel
+  // consumers can break sessions out by entrypoint (cli vs claude-desktop
+  // vs sdk vs claude-ssh vs CCR remote etc). Off by default — entrypoint
+  // is high cardinality for some integrations and not every consumer
+  // wants the extra dimension. Sourced from CLAUDE_CODE_ENTRYPOINT, which
+  // is set by every launcher (`cli`, `claude-desktop`, `sdk`, …).
+  if (
+    isEnvTruthy(process.env.OTEL_METRICS_INCLUDE_ENTRYPOINT) &&
+    process.env.CLAUDE_CODE_ENTRYPOINT
+  ) {
+    baseAttributes['app.entrypoint'] = process.env.CLAUDE_CODE_ENTRYPOINT
+  }
+
   const baseResource = resourceFromAttributes(baseAttributes)
 
   // Use OpenTelemetry detectors

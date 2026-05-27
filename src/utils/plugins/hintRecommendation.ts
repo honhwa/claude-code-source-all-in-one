@@ -23,6 +23,7 @@ import {
 } from '../claudeCodeHints.js'
 import { getGlobalConfig, saveGlobalConfig } from '../config.js'
 import { logForDebugging } from '../debug.js'
+import { getSettingsForSource } from '../settings/settings.js'
 import { isPluginInstalled } from './installedPluginsManager.js'
 import { getPluginById } from './marketplaceManager.js'
 import {
@@ -30,6 +31,19 @@ import {
   parsePluginIdentifier,
 } from './pluginIdentifier.js'
 import { isPluginBlockedByPolicy } from './pluginPolicy.js'
+
+/**
+ * Upstream 2.1.152: a hint's marketplace passes the suggestion gate if it's
+ * either an official marketplace OR on the admin-configured allowlist in
+ * managed settings (`pluginSuggestionMarketplaces`). Empty / unset allowlist
+ * keeps the prior official-only behavior.
+ */
+function isMarketplaceAllowedForSuggestion(marketplace: string): boolean {
+  if (isOfficialMarketplaceName(marketplace)) return true
+  const allowlist =
+    getSettingsForSource('policySettings')?.pluginSuggestionMarketplaces
+  return Array.isArray(allowlist) && allowlist.includes(marketplace)
+}
 
 /**
  * Hard cap on `claudeCodeHints.plugin[]` — bounds config growth. Each shown
@@ -75,7 +89,7 @@ export function maybeRecordPluginHint(hint: ClaudeCodeHint): void {
   const pluginId = hint.value
   const { name, marketplace } = parsePluginIdentifier(pluginId)
   if (!name || !marketplace) return
-  if (!isOfficialMarketplaceName(marketplace)) return
+  if (!isMarketplaceAllowedForSuggestion(marketplace)) return
   if (shown.includes(pluginId)) return
   if (isPluginInstalled(pluginId)) return
   if (isPluginBlockedByPolicy(pluginId)) return

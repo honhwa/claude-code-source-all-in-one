@@ -594,19 +594,30 @@ export async function marketplaceListHandler(options: {
 // marketplace remove (lines 5576–5598)
 export async function marketplaceRemoveHandler(
   name: string,
-  options: { cowork?: boolean },
+  options: { cowork?: boolean; scope?: 'user' | 'project' | 'local' },
 ): Promise<void> {
   if (options.cowork) setUseCoworkPlugins(true)
   try {
-    await removeMarketplaceSource(name)
+    // Upstream 2.1.152: --scope makes remove symmetric with add/install/
+    // uninstall. When omitted, we still scrub every editable scope (the
+    // existing UX); when set, only that scope is touched so an admin can
+    // remove a marketplace from local without disturbing user/project.
+    await removeMarketplaceSource(name, { scope: options.scope })
     clearAllCaches()
 
     logEvent('tengu_marketplace_removed', {
       marketplace_name:
         name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      ...(options.scope && {
+        scope:
+          options.scope as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      }),
     })
 
-    cliOk(`${figures.tick} Successfully removed marketplace: ${name}`)
+    const scopeNote = options.scope ? ` from ${options.scope} scope` : ''
+    cliOk(
+      `${figures.tick} Successfully removed marketplace: ${name}${scopeNote}`,
+    )
   } catch (error) {
     handleMarketplaceError(error, 'remove marketplace')
   }

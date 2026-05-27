@@ -835,6 +835,21 @@ export const SessionStartHookSpecificOutputSchema = lazySchema(() =>
     additionalContext: z.string().optional(),
     initialUserMessage: z.string().optional(),
     watchPaths: z.array(z.string()).optional(),
+    // Upstream 2.1.152: SessionStart can request a skill-dir re-scan and/or
+    // set the session title at startup / resume. Keep this in sync with the
+    // matching SessionStart variant in src/types/hooks.ts — the compile-time
+    // Assert at the bottom of that file enforces the two schemas match.
+    reloadSkills: z.boolean().optional(),
+    sessionTitle: z.string().optional(),
+  }),
+)
+
+// Upstream 2.1.152: hook can transform or hide assistant text at render time.
+export const MessageDisplayHookSpecificOutputSchema = lazySchema(() =>
+  z.object({
+    hookEventName: z.literal('MessageDisplay'),
+    displayText: z.string().optional(),
+    hide: z.boolean().optional(),
   }),
 )
 
@@ -947,6 +962,8 @@ export const SyncHookJSONOutputSchema = lazySchema(() =>
         CwdChangedHookSpecificOutputSchema(),
         FileChangedHookSpecificOutputSchema(),
         WorktreeCreateHookSpecificOutputSchema(),
+        // Upstream 2.1.152: MessageDisplay hook event (render-side transform)
+        MessageDisplayHookSpecificOutputSchema(),
       ])
       .optional(),
   }),

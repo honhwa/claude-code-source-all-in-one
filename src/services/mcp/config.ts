@@ -209,20 +209,53 @@ export function isReservedMcpServerName(name: string): boolean {
 /**
  * Compute a dedup signature for an MCP server config.
  * Two configs with the same signature are considered "the same server" for
- * plugin deduplication. Ignores env (plugins always inject CLAUDE_PLUGIN_ROOT)
- * and headers (same URL = same server regardless of auth).
- * Returns null only for configs with neither command nor url (sdk type).
+ * plugin deduplication.
+ *
+ * Includes env vars (minus the plugin-injected `CLAUDE_PLUGIN_ROOT`) so two
+ * plugins that launch the same binary with different `API_KEY` / `ENDPOINT` /
+ * `CONFIG_PATH` env values stay separate — upstream 2.1.152 fix.
+ * Previously env was ignored entirely; two plugins shipping the SAME
+ * `npx some-mcp-server` command with different per-plugin configuration
+ * were collapsed and only one started. URL servers still skip env/headers
+ * (same URL ≈ same server regardless of auth header). Returns null only
+ * for configs with neither command nor url (sdk type).
  */
 export function getMcpServerSignature(config: McpServerConfig): string | null {
   const cmd = getServerCommandArray(config)
   if (cmd) {
-    return `stdio:${jsonStringify(cmd)}`
+    const env = getServerEnvForSignature(config)
+    return env === null
+      ? `stdio:${jsonStringify(cmd)}`
+      : `stdio:${jsonStringify(cmd)}|env:${jsonStringify(env)}`
   }
   const url = getServerUrl(config)
   if (url) {
     return `url:${unwrapCcrProxyUrl(url)}`
   }
   return null
+}
+
+/**
+ * Get the env map from a stdio MCP server config, with plugin-injected
+ * variables stripped (currently just CLAUDE_PLUGIN_ROOT, which is always
+ * per-plugin and therefore always different — keeping it in the signature
+ * would over-dedup plugin servers that ARE genuine duplicates). Returns
+ * null when no env is set, sorted keys when env is non-empty so dedup is
+ * insertion-order-independent.
+ */
+function getServerEnvForSignature(
+  config: McpServerConfig,
+): Record<string, string> | null {
+  if (config.type !== undefined && config.type !== 'stdio') return null
+  const stdioConfig = config as McpStdioServerConfig
+  const env = stdioConfig.env
+  if (!env || Object.keys(env).length === 0) return null
+  const sorted: Record<string, string> = {}
+  for (const key of Object.keys(env).sort()) {
+    if (key === 'CLAUDE_PLUGIN_ROOT') continue
+    sorted[key] = env[key]!
+  }
+  return Object.keys(sorted).length > 0 ? sorted : null
 }
 
 /**

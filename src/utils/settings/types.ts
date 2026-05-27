@@ -559,6 +559,20 @@ export const SettingsSchema = lazySchema(() =>
             'claude.ai cloud MCP connectors are loaded in addition to the managed-mcp.json servers. ' +
             'Default behavior in enterprise mode is to load only managed-mcp.json.',
         ),
+      // Upstream 2.1.152: allowlist of org marketplace names whose plugins
+      // may be surfaced via context-aware "did you mean this plugin?" tips.
+      // The default tip behavior only suggests plugins from the official
+      // marketplace; admins can extend the allowlist to include their own
+      // private/org marketplace(s) so internal tooling shows up too.
+      // Names are matched against the marketplace identifier in the plugin
+      // slug (`name@<marketplace>`).
+      pluginSuggestionMarketplaces: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Allowlist of marketplace names whose plugins may be suggested in ' +
+            'context-aware tips, in addition to the official marketplace.',
+        ),
       // Force customizations through plugins only (LinkedIn ask via GTM)
       strictPluginOnlyCustomization: z
         .preprocess(

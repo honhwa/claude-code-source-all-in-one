@@ -28,6 +28,13 @@ export type PromptCommand = {
   contentLength: number // Length of command content in characters (used for token estimation)
   argNames?: string[]
   allowedTools?: string[]
+  /**
+   * Upstream 2.1.152: tools to REMOVE from the model's view while this skill
+   * or slash command is active. Currently applied for `context: fork` skills
+   * (used by SkillTool to filter the sub-agent's `availableTools`). Inline
+   * skills carry the value but don't yet alter the live tool list.
+   */
+  disallowedTools?: string[]
   model?: string
   source: SettingSource | 'builtin' | 'mcp' | 'plugin' | 'bundled'
   pluginInfo?: {

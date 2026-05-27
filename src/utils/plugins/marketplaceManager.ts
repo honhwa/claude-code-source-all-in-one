@@ -1974,7 +1974,15 @@ export async function addMarketplaceSource(
  * @param name - The marketplace name to remove
  * @throws If marketplace with given name is not found
  */
-export async function removeMarketplaceSource(name: string): Promise<void> {
+export async function removeMarketplaceSource(
+  name: string,
+  // Upstream 2.1.152: accept a scope so `claude plugin marketplace remove`
+  // can be symmetric with the add/install/uninstall flow. When omitted,
+  // we keep the prior behavior of scrubbing from every editable scope
+  // (used by the interactive UI and by tests that don't care about which
+  // settings file the entry lived in).
+  options: { scope?: 'user' | 'project' | 'local' } = {},
+): Promise<void> {
   const config = await loadKnownMarketplacesConfig()
 
   if (!config[name]) {
@@ -2009,10 +2017,21 @@ export async function removeMarketplaceSource(name: string): Promise<void> {
   // Clean up settings.json - remove marketplace from extraKnownMarketplaces
   // and remove related plugin entries from enabledPlugins
 
-  // Check each editable settings source
+  // Check editable settings source(s). When `options.scope` is set, only
+  // touch that one; otherwise sweep all three.
+  const scopeToSource: Record<
+    'user' | 'project' | 'local',
+    'userSettings' | 'projectSettings' | 'localSettings'
+  > = {
+    user: 'userSettings',
+    project: 'projectSettings',
+    local: 'localSettings',
+  }
   const editableSources: Array<
     'userSettings' | 'projectSettings' | 'localSettings'
-  > = ['userSettings', 'projectSettings', 'localSettings']
+  > = options.scope
+    ? [scopeToSource[options.scope]]
+    : ['userSettings', 'projectSettings', 'localSettings']
 
   for (const source of editableSources) {
     const settings = getSettingsForSource(source)

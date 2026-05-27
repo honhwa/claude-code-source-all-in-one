@@ -4267,13 +4267,18 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/plugins.js');
     await marketplaceListHandler(options);
   });
-  marketplaceCmd.command('remove <name>').alias('rm').description('Remove a configured marketplace').addOption(coworkOption()).action(async (name: string, options: {
+  marketplaceCmd.command('remove <name>').alias('rm').description('Remove a configured marketplace').option('-s, --scope <scope>', `Settings scope to remove from: ${VALID_INSTALLABLE_SCOPES.join(', ')} (default: all scopes)`).addOption(coworkOption()).action(async (name: string, options: {
     cowork?: boolean;
+    scope?: string;
   }) => {
+    if (options.scope && !VALID_INSTALLABLE_SCOPES.includes(options.scope as (typeof VALID_INSTALLABLE_SCOPES)[number])) {
+      process.stderr.write(`Error: --scope must be one of: ${VALID_INSTALLABLE_SCOPES.join(', ')}\n`);
+      process.exit(1);
+    }
     const {
       marketplaceRemoveHandler
     } = await import('./cli/handlers/plugins.js');
-    await marketplaceRemoveHandler(name, options);
+    await marketplaceRemoveHandler(name, options as { cowork?: boolean; scope?: 'user' | 'project' | 'local' });
   });
   marketplaceCmd.command('update [name]').description('Update marketplace(s) from their source - updates all if no name specified').addOption(coworkOption()).action(async (name: string | undefined, options: {
     cowork?: boolean;

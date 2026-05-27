@@ -373,6 +373,10 @@ export interface HookResult {
   permissionRequestResult?: PermissionRequestResult
   elicitationResponse?: ElicitationResponse
   watchPaths?: string[]
+  /** Upstream 2.1.152: SessionStart hook can ask for a skill-dir re-scan */
+  reloadSkills?: boolean
+  /** Upstream 2.1.152: SessionStart hook can set the session title */
+  sessionTitle?: string
   elicitationResultResponse?: ElicitationResponse
   retry?: boolean
   hook: HookCommand | HookCallback | FunctionHook
@@ -392,6 +396,8 @@ export type AggregatedHookResult = {
   updatedMCPToolOutput?: unknown
   permissionRequestResult?: PermissionRequestResult
   watchPaths?: string[]
+  reloadSkills?: boolean
+  sessionTitle?: string
   elicitationResponse?: ElicitationResponse
   elicitationResultResponse?: ElicitationResponse
   retry?: boolean
@@ -683,6 +689,15 @@ function processHookJSONOutput({
           json.hookSpecificOutput.watchPaths
         ) {
           result.watchPaths = json.hookSpecificOutput.watchPaths
+        }
+        // Upstream 2.1.152: SessionStart hooks can request a skill re-scan
+        // and/or override the session title. Both surface here so the
+        // downstream aggregator can route them.
+        if (json.hookSpecificOutput.reloadSkills === true) {
+          result.reloadSkills = true
+        }
+        if (json.hookSpecificOutput.sessionTitle) {
+          result.sessionTitle = json.hookSpecificOutput.sessionTitle
         }
         break
       case 'Setup':
@@ -2887,6 +2902,30 @@ async function* executeHooks({
       )
       yield {
         watchPaths: result.watchPaths,
+      }
+    }
+
+    // Upstream 2.1.152: surface SessionStart's reloadSkills + sessionTitle to
+    // the aggregator. SessionStart's caller (initSession / resumeSession in
+    // main.tsx) reads these from the aggregated result and triggers
+    // clearSkillCaches() / saveSessionTitle() respectively. We pass the
+    // signals through unconditionally — the SessionStart consumer is the
+    // only place that acts on them, and other hooks' yielded results just
+    // ignore the extra fields.
+    if (result.reloadSkills) {
+      logForDebugging(
+        `Hook ${hookEvent} (${getHookDisplayText(result.hook)}) requested skill reload`,
+      )
+      yield {
+        reloadSkills: true,
+      }
+    }
+    if (result.sessionTitle) {
+      logForDebugging(
+        `Hook ${hookEvent} (${getHookDisplayText(result.hook)}) set session title: ${result.sessionTitle}`,
+      )
+      yield {
+        sessionTitle: result.sessionTitle,
       }
     }
 
