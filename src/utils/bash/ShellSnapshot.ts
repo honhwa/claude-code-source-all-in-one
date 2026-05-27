@@ -206,9 +206,17 @@ function getUserSnapshotContent(configFile: string): string {
   // convention for "private" helpers, e.g. `_my_dotfile_helper`). Aliases
   // referencing those helpers — and the user's own muscle-memory commands —
   // broke whenever Claude Code spawned a Bash subprocess from the snapshot.
-  // We now capture EVERY user function. Completion helpers come along for
-  // the ride; they're inert outside an interactive completion context, so
-  // there's no observable cost beyond a slightly larger snapshot file.
+  // We now capture EVERY user function.
+  //
+  // Upstream 2.1.148: capturing ALL functions caused exit 127 on every
+  // command for users whose snapshot also captured `set -o errexit`. When
+  // a completion helper's body referenced a binary missing on PATH in the
+  // non-interactive child shell (or invalid syntax slipped through
+  // declare -f's pretty-print round-trip), the eval line failed under
+  // errexit and the whole sourced script aborted — bash then returned 127
+  // for the user's actual command because it never reached the `eval` of
+  // it. The defensive `|| true` after each function declaration eval
+  // breaks that chain without re-introducing the underscore drop.
   if (isZsh) {
     content += `
       echo "# Functions" >> "$SNAPSHOT_FILE"
@@ -232,8 +240,9 @@ function getUserSnapshotContent(configFile: string): string {
       declare -F | cut -d' ' -f3 | while read func; do
         # Encode the function to base64, preserving all special characters
         encoded_func=$(declare -f "$func" | base64 )
-        # Write the function definition to the snapshot
-        echo "eval ${LITERAL_BACKSLASH}"${LITERAL_BACKSLASH}$(echo '$encoded_func' | base64 -d)${LITERAL_BACKSLASH}" > /dev/null 2>&1" >> "$SNAPSHOT_FILE"
+        # Write the function definition to the snapshot.
+        # Trailing \`|| true\` defangs errexit when sourced — see 2.1.148 comment.
+        echo "eval ${LITERAL_BACKSLASH}"${LITERAL_BACKSLASH}$(echo '$encoded_func' | base64 -d)${LITERAL_BACKSLASH}" > /dev/null 2>&1 || true" >> "$SNAPSHOT_FILE"
       done
     `
   }

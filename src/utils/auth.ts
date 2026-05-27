@@ -1810,7 +1810,21 @@ export function getOtelHeadersFromHelper(): Record<string, string> {
   }
 
   try {
-    const result = execSyncWithDefaults_DEPRECATED(otelHeadersHelper, {
+    // Upstream 2.1.149: shell-quote the configured value when it looks like
+    // a bare path. execSyncWithDefaults_DEPRECATED runs under `shell: true`,
+    // so a path containing spaces (e.g. "/Users/My Name/helper.sh") was
+    // word-split by the shell — exec'd as "/Users/My" with the rest as
+    // args — and silently failed. Heuristic: if the value contains NO
+    // shell-significant characters (`&|;<>$()"'\`\\`), it's a single
+    // path-or-command token and safe to wrap in single quotes. If the
+    // user supplied a shell command with flags or a pipeline, we leave
+    // the value alone — they're responsible for their own quoting there.
+    const SHELL_METACHARS = /[&|;<>$()"'`\\]/
+    const looksLikeBareToken = !SHELL_METACHARS.test(otelHeadersHelper)
+    const quotedHelper = looksLikeBareToken
+      ? `'${otelHeadersHelper}'`
+      : otelHeadersHelper
+    const result = execSyncWithDefaults_DEPRECATED(quotedHelper, {
       timeout: 30000, // 30 seconds - allows for auth service latency
     })
       ?.toString()

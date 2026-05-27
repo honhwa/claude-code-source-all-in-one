@@ -979,7 +979,29 @@ async function loadCachedSessionMeta(
   const metaPath = join(getSessionMetaDir(), `${sessionId}.json`)
   try {
     const content = await readFile(metaPath, { encoding: 'utf-8' })
-    return jsonParse(content)
+    const parsed = jsonParse(content) as Partial<SessionMeta> | null
+    if (!parsed || typeof parsed !== 'object') return null
+    // Upstream 2.1.149: meta files written by older Claude Code versions
+    // may be missing array/object fields added in later releases
+    // (user_message_timestamps, message_hours, user_response_times,
+    // tool_error_categories, languages, tool_counts, goal_categories
+    // etc). Downstream aggregation does `for (const t of meta.X)` /
+    // `Object.entries(meta.Y)` without null-checks and crashed the whole
+    // /insights render on the first stale file. Backfill with empty
+    // defaults so the consumer code can iterate without guards. Only
+    // the *iterable* fields are filled — required scalar fields (session_id,
+    // start_time, etc.) staying undefined would still indicate a corrupt
+    // record; in that case the upstream aggregator's own type guards trip
+    // on the specific bad field instead of the whole report blowing up.
+    return {
+      ...parsed,
+      tool_counts: parsed.tool_counts ?? {},
+      languages: parsed.languages ?? {},
+      user_response_times: parsed.user_response_times ?? [],
+      tool_error_categories: parsed.tool_error_categories ?? {},
+      message_hours: parsed.message_hours ?? [],
+      user_message_timestamps: parsed.user_message_timestamps ?? [],
+    } as SessionMeta
   } catch {
     return null
   }

@@ -542,6 +542,23 @@ export const SettingsSchema = lazySchema(() =>
             'deniedMcpServers still merges from all sources, so users can deny servers for themselves. ' +
             'Users can still add their own MCP servers, but only the admin-defined allowlist applies.',
         ),
+      // Upstream 2.1.149: allow claude.ai cloud MCP connectors alongside the
+      // managed-mcp.json allowlist. The default behavior in enterprise mode
+      // (doesEnterpriseMcpConfigExist() === true) is to load ONLY the
+      // managed-mcp.json servers and skip the claude.ai fetch entirely.
+      // Setting `allowAllClaudeAiMcps: true` in managed settings opts back
+      // in to loading claude.ai connectors as well — useful for enterprises
+      // who want their managed-mcp.json to be additive rather than
+      // exclusive. Has no effect outside enterprise mode (claude.ai is
+      // already loaded by default there).
+      allowAllClaudeAiMcps: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true (and set in managed settings, only meaningful alongside managed-mcp.json), ' +
+            'claude.ai cloud MCP connectors are loaded in addition to the managed-mcp.json servers. ' +
+            'Default behavior in enterprise mode is to load only managed-mcp.json.',
+        ),
       // Force customizations through plugins only (LinkedIn ask via GTM)
       strictPluginOnlyCustomization: z
         .preprocess(

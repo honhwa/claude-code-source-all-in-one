@@ -1332,8 +1332,13 @@ export async function getAllMcpConfigs(): Promise<{
   servers: Record<string, ScopedMcpServerConfig>
   errors: PluginError[]
 }> {
-  // In enterprise mode, don't load claude.ai servers (enterprise has exclusive control)
-  if (doesEnterpriseMcpConfigExist()) {
+  // In enterprise mode, don't load claude.ai servers (enterprise has exclusive control).
+  // Upstream 2.1.149: the `allowAllClaudeAiMcps` managed setting opts back in
+  // to loading claude.ai connectors *alongside* managed-mcp.json — enterprise
+  // admins who want managed-mcp.json to be additive rather than exclusive.
+  const allowAllClaudeAi =
+    getSettingsForSource('policySettings')?.allowAllClaudeAiMcps === true
+  if (doesEnterpriseMcpConfigExist() && !allowAllClaudeAi) {
     return getClaudeCodeMcpConfigs()
   }
 

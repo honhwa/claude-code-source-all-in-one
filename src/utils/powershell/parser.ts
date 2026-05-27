@@ -1462,7 +1462,36 @@ const DIRECTORY_CHANGE_CMDLETS = new Set([
   'pop-location',
 ])
 
-const DIRECTORY_CHANGE_ALIASES = new Set(['cd', 'sl', 'chdir', 'pushd', 'popd'])
+const DIRECTORY_CHANGE_ALIASES = new Set([
+  'cd',
+  'sl',
+  'chdir',
+  'pushd',
+  'popd',
+  // Upstream 2.1.147 / 2.1.149: PowerShell ships built-in helper functions
+  // that change the working directory without going through `cd`:
+  //   cd.. → Set-Location ..
+  //   cd\  → Set-Location \   (root of current drive)
+  //   cd~  → Set-Location ~   (user home)
+  // These are case-insensitive and absent from the recognized alias set
+  // would let a script run `cd..` to escape the workspace undetected and
+  // then have a subsequent allowed command read outside it. Drive-letter
+  // forms (`C:`, `D:`) ALSO change the working directory in PowerShell —
+  // handled below in isDriveLetterCdShortcut() because they don't fit a
+  // static set (must match any letter + `:`).
+  'cd..',
+  'cd\\',
+  'cd~',
+])
+
+/**
+ * PowerShell's `<letter>:` (e.g. `C:`, `D:`) is a built-in working-directory
+ * change: it switches to the drive's current directory. Same security
+ * surface as `cd..` / `cd\` — see DIRECTORY_CHANGE_ALIASES.
+ */
+function isDriveLetterCdShortcut(name: string): boolean {
+  return /^[a-z]:$/i.test(name)
+}
 
 /**
  * Get all command names across all statements, pipeline segments, and nested commands.
@@ -1584,7 +1613,8 @@ export function hasDirectoryChange(parsed: ParsedPowerShellCommand): boolean {
   for (const cmdName of getAllCommandNames(parsed)) {
     if (
       DIRECTORY_CHANGE_CMDLETS.has(cmdName) ||
-      DIRECTORY_CHANGE_ALIASES.has(cmdName)
+      DIRECTORY_CHANGE_ALIASES.has(cmdName) ||
+      isDriveLetterCdShortcut(cmdName)
     ) {
       return true
     }

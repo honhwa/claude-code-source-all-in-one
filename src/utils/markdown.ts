@@ -199,7 +199,23 @@ export function formatToken(
         return token.text
       }
       if (parent?.type === 'list_item') {
-        return `${orderedListNumber === null ? '-' : getListNumber(listDepth, orderedListNumber) + '.'} ${token.tokens ? token.tokens.map(_ => formatToken(_, theme, listDepth, orderedListNumber, token, highlight)).join('') : linkifyIssueReferences(token.text)}${EOL}`
+        // Upstream 2.1.149: GFM task lists (`- [ ]` / `- [x]`) render as
+        // visible checkbox glyphs instead of the literal "[ ]" / "[x]"
+        // brackets the prior pass-through produced. marked exposes the
+        // checked state on the list_item via `task: true` + `checked: boolean`,
+        // and strips the `[ ]`/`[x]` prefix from the child text token —
+        // so we don't need to re-strip here, just prepend the glyph after
+        // the bullet. Heavy ballot box (✘) feels too negative for an
+        // unchecked checkbox; use the standard empty/checked box pair
+        // (☐ U+2610 / ☑ U+2611) which most terminal fonts render and
+        // matches the GFM web rendering.
+        const parentList = parent as Tokens.ListItem
+        const checkbox = parentList.task
+          ? parentList.checked
+            ? '☑ '
+            : '☐ '
+          : ''
+        return `${orderedListNumber === null ? '-' : getListNumber(listDepth, orderedListNumber) + '.'} ${checkbox}${token.tokens ? token.tokens.map(_ => formatToken(_, theme, listDepth, orderedListNumber, token, highlight)).join('') : linkifyIssueReferences(token.text)}${EOL}`
       }
       return linkifyIssueReferences(token.text)
     case 'table': {
