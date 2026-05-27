@@ -2189,7 +2189,25 @@ export const fetchCommandsForClient = memoizeWithLRU(
 
       // Convert MCP prompts to our Command format
       return promptsToProcess.map(prompt => {
-        const argNames = Object.values(prompt.arguments ?? {}).map(k => k.name)
+        const argEntries = Object.values(prompt.arguments ?? {})
+        const argNames = argEntries.map(k => k.name)
+        // Upstream 2.1.145: track which arguments the prompt marks required
+        // so we can emit a clear "missing X, expected usage: ..." error
+        // BEFORE the server roundtrip — previously the server's raw
+        // validation error (often a bare schema name like
+        // "Invalid input: arg1 is required") leaked into the conversation
+        // and the user had no idea which slash-command argument to add.
+        const requiredArgNames = argEntries
+          .filter(k => k.required === true)
+          .map(k => k.name)
+        const usageHint =
+          argNames.length === 0
+            ? `/${client.name}:${prompt.name}`
+            : `/${client.name}:${prompt.name} ${argNames
+                .map(n =>
+                  requiredArgNames.includes(n) ? `<${n}>` : `[${n}]`,
+                )
+                .join(' ')}`
         return {
           type: 'prompt' as const,
           name: 'mcp__' + normalizeNameForMCP(client.name) + '__' + prompt.name,
@@ -2208,7 +2226,31 @@ export const fetchCommandsForClient = memoizeWithLRU(
           argNames,
           source: 'mcp',
           async getPromptForCommand(args: string) {
-            const argsArray = args.split(' ')
+            const argsArray = args.trim() === '' ? [] : args.split(' ')
+            // Pre-flight: check required arguments are provided. argNames is
+            // positional, so a "missing" argument is either absent from the
+            // tail of argsArray or present as the empty string. Surface a
+            // clear error with the usage hint instead of letting the server
+            // bounce back with raw schema validation noise.
+            const missing: string[] = []
+            for (let i = 0; i < argNames.length; i++) {
+              const name = argNames[i]!
+              if (!requiredArgNames.includes(name)) continue
+              const supplied = argsArray[i]
+              if (supplied === undefined || supplied === '') {
+                missing.push(name)
+              }
+            }
+            if (missing.length > 0) {
+              const which =
+                missing.length === 1
+                  ? `argument: ${missing[0]}`
+                  : `arguments: ${missing.join(', ')}`
+              throw new Error(
+                `MCP prompt '${prompt.name}' is missing required ${which}. ` +
+                  `Expected usage: ${usageHint}`,
+              )
+            }
             try {
               const connectedClient = await ensureConnectedClient(client)
               const result = await connectedClient.client.getPrompt({

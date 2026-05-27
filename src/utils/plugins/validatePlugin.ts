@@ -209,6 +209,53 @@ export async function validatePluginManifest(
           checkPathTraversal(skill, `skills[${i}]`, errors)
         }
       })
+      // Upstream 2.1.145: a skills entry must point at a DIRECTORY containing
+      // SKILL.md (matches the runtime loader at loadSkillsFromDirectory + the
+      // collectMarkdown isSkillsDir branch above — a single .md file in
+      // skills/ is silently dropped at load time, so a `"skills": ["foo.md"]`
+      // manifest silently ships zero skills). Flag the file case here and
+      // suggest the parent directory.
+      //
+      // We do this after the path-traversal sweep so that already-traversed
+      // entries don't get a second confusing error. Resolved against the
+      // plugin root (the parent of `.claude-plugin/` if absolutePath sits in
+      // .claude-plugin/, otherwise the manifest's own directory) so the same
+      // path the loader sees is the one we stat.
+      const manifestDir = path.dirname(absolutePath)
+      const pluginRoot =
+        path.basename(manifestDir) === '.claude-plugin'
+          ? path.dirname(manifestDir)
+          : manifestDir
+      await Promise.all(
+        skills.map(async (skill, i) => {
+          if (typeof skill !== 'string') return
+          // Skip entries that already failed path-traversal (no extra noise).
+          if (
+            errors.some(e =>
+              e.path === `skills[${i}]` && /escapes/i.test(e.message),
+            )
+          )
+            return
+          const resolved = path.resolve(pluginRoot, skill)
+          let s: Stats
+          try {
+            s = await stat(resolved)
+          } catch {
+            // Missing path is a separate concern (the schema/loader will
+            // surface it as "skill not found"); don't double-report here.
+            return
+          }
+          if (s.isFile()) {
+            const parent = path.dirname(skill) || '.'
+            errors.push({
+              path: `skills[${i}]`,
+              message:
+                `"${skill}" is a file, but skills entries must point to a directory containing SKILL.md. ` +
+                `Did you mean "${parent}"?`,
+            })
+          }
+        }),
+      )
     }
   }
 

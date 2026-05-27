@@ -1025,16 +1025,63 @@ async function callInner(
 
   // --- Text file (single async read via readFileInRange) ---
   const lineOffset = offset === 0 ? 0 : offset - 1
-  const { content, lineCount, totalLines, totalBytes, readBytes, mtimeMs } =
-    await readFileInRange(
-      resolvedFilePath,
-      lineOffset,
-      limit,
-      limit === undefined ? maxSizeBytes : undefined,
-      context.abortController.signal,
-    )
+  const initial = await readFileInRange(
+    resolvedFilePath,
+    lineOffset,
+    limit,
+    limit === undefined ? maxSizeBytes : undefined,
+    context.abortController.signal,
+  )
+  let content = initial.content
+  let lineCount = initial.lineCount
+  const { totalLines, totalBytes, readBytes, mtimeMs } = initial
 
-  await validateContentTokens(content, ext, maxTokens)
+  // Upstream 2.1.145: a whole-file read whose content exceeds the token
+  // budget no longer throws — return a truncated first page with a
+  // "PARTIAL view" notice instead. Hard error is wrong for the common case
+  // where the model is exploring a codebase and just wants whatever it can
+  // see; the user can paginate via offset/limit if it needs the rest.
+  // Still throw when the model passed explicit offset/limit (the request
+  // was paginated, the model knows what it's asking for) — otherwise the
+  // user loses the precise-range semantics.
+  const isWholeFileRead = limit === undefined && offset === 0
+  try {
+    await validateContentTokens(content, ext, maxTokens)
+  } catch (e) {
+    if (!(e instanceof MaxFileReadTokenExceededError) || !isWholeFileRead) {
+      throw e
+    }
+    const effectiveMaxTokens =
+      maxTokens ?? getDefaultFileReadingLimits().maxTokens
+    // Reserve ~10% of the budget for the notice itself and for token-count
+    // estimation slack. Estimate output bytes from the actual token ratio
+    // — the file may be mostly whitespace (high bytes/token) or dense JSON
+    // (low bytes/token), and a constant char ratio under-truncates on dense
+    // content.
+    const budgetTokens = Math.floor(effectiveMaxTokens * 0.9)
+    const charsPerToken = Math.max(1, Math.floor(content.length / e.tokenCount))
+    const sliceChars = budgetTokens * charsPerToken
+    // Cut on a line boundary so the partial view is structurally readable.
+    // Slice + back off to the last newline; if there's no newline in range
+    // (single huge line), accept the hard cut.
+    let truncated = content.slice(0, sliceChars)
+    const lastNl = truncated.lastIndexOf('\n')
+    if (lastNl > 0) truncated = truncated.slice(0, lastNl)
+    const truncatedLineCount = truncated.split('\n').length
+    const partialNotice =
+      `<system-reminder>PARTIAL view — this file is ${e.tokenCount} tokens, ` +
+      `over the ${effectiveMaxTokens}-token whole-file budget. Showing the ` +
+      `first ${truncatedLineCount} of ${totalLines} lines. Use offset and ` +
+      `limit (or search) to read the rest.</system-reminder>\n`
+    content = partialNotice + truncated
+    lineCount = truncatedLineCount
+    logEvent('tengu_file_read_token_limit_truncated', {
+      original_tokens: e.tokenCount,
+      max_tokens: effectiveMaxTokens,
+      original_lines: totalLines,
+      truncated_lines: truncatedLineCount,
+    })
+  }
 
   readFileState.set(fullFilePath, {
     content,

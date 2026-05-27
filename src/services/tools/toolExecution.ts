@@ -28,6 +28,7 @@ import {
   isCodeEditingTool,
 } from '../../hooks/toolPermission/permissionLogging.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
+import { getAgentContext } from '../../utils/agentContext.js'
 import {
   findToolByName,
   type Tool,
@@ -907,6 +908,19 @@ async function checkPermissionsAndCallTool(
       const bashInput = processedInput as BashToolInput
       toolAttributes.full_command = bashInput.command
     }
+  }
+  // Upstream 2.1.145: emit agent_id / parent_agent_id on every
+  // claude_code.tool span so OTEL consumers can group tool calls by the
+  // subagent that issued them and reconstruct the dispatcher → subagent
+  // → tool tree. toolUseContext.agentId is set on every subagent
+  // invocation (AgentTool, SkillTool fork, etc.); getAgentContext() walks
+  // the AsyncLocalStorage chain to find the agent that *spawned* this one.
+  if (toolUseContext.agentId) {
+    toolAttributes.agent_id = toolUseContext.agentId
+  }
+  const parentAgentId = getAgentContext()?.agentId
+  if (parentAgentId && parentAgentId !== toolUseContext.agentId) {
+    toolAttributes.parent_agent_id = parentAgentId
   }
 
   startToolSpan(

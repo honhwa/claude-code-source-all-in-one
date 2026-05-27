@@ -2203,6 +2203,34 @@ const PROC_ENVIRON_RE = /\/proc\/.*\/environ/
  */
 const NEWLINE_HASH_RE = /\n[ \t]*#/
 
+/**
+ * Env vars whose bare assignment (no command) is provably inert across the
+ * full bash process tree Claude spawns: they only influence the assigning
+ * shell's child processes (locale, color, build metadata, etc.) and CANNOT
+ * load executable code, change library search paths, or alter command
+ * resolution. Used by checkSemantics to gate the empty-argv branch — see
+ * the comment at the gate for the upstream 2.1.145 rationale. Kept narrow
+ * on purpose: if a var COULD plausibly redirect execution (PATH, LD_*,
+ * NODE_OPTIONS, etc.), it stays OFF this list and the bare assignment goes
+ * to the user via the permission prompt.
+ *
+ * NOTE: This is not the same allowlist as bashPermissions.SAFE_ENV_VARS,
+ * which gates stripping for matching prefix rules. SAFE_ENV_VARS includes
+ * a much larger surface (GOFLAGS is excluded there for execution-flag
+ * reasons, but build-config vars like GOOS/GOARCH are in). For the bare-
+ * assignment gate we want only "literally no side effect possible without
+ * a paired command" — a very short list.
+ */
+const ASSIGNMENT_NEVER_DANGEROUS = new Set<string>([
+  // Color/UI hints — child processes may render differently, but no exec impact
+  'NO_COLOR',
+  'FORCE_COLOR',
+  'CLICOLOR',
+  'CLICOLOR_FORCE',
+  'COLORTERM',
+  'TERM',
+])
+
 export type SemanticCheckResult = { ok: true } | { ok: false; reason: string }
 
 /**
@@ -2383,7 +2411,34 @@ export function checkSemantics(commands: SimpleCommand[]): SemanticCheckResult {
       }
     }
     const name = a[0]
-    if (name === undefined) continue
+    if (name === undefined) {
+      // SECURITY (upstream 2.1.145): a SimpleCommand with empty argv but
+      // non-empty envVars (e.g. `LD_PRELOAD=/tmp/evil.so`) used to fall
+      // straight through every builtin check below — the command engine
+      // treated "just an assignment" as inert. That's true for the assignment
+      // itself, but the rest of bashToolHasPermission also skipped argv-based
+      // rule matching for this command, so when chained as
+      // `LD_PRELOAD=/tmp/evil.so && some_allowed_command` the FIRST
+      // SimpleCommand contributed an "auto-allow" verdict to the every-allow
+      // aggregate (bashPermissions.ts ~:2404). Net: a non-allowlisted
+      // assignment was auto-approved alongside a sibling allowed command,
+      // and once approved it persisted into the second exec's environment
+      // (compound `;`/`&&` shares the parent shell's env). Reject any bare
+      // assignment whose env var isn't a known no-op-impact variable so it
+      // routes through the permission prompt instead.
+      if (cmd.envVars.length > 0) {
+        const dangerous = cmd.envVars.find(
+          v => !ASSIGNMENT_NEVER_DANGEROUS.has(v.name),
+        )
+        if (dangerous) {
+          return {
+            ok: false,
+            reason: `Bare assignment to '${dangerous.name}' has no command to gate; requires approval to avoid auto-approval bypass`,
+          }
+        }
+      }
+      continue
+    }
 
     // SECURITY: Empty command name. Quoted empty (`"" cmd`) is harmless —
     // bash tries to exec "" and fails with "command not found". But an

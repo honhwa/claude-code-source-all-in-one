@@ -118,6 +118,25 @@ const remoteSkillModules = feature('EXPERIMENTAL_SKILL_SEARCH')
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 /**
+ * Process-wide stack of `context: fork` skill names currently mid-execution.
+ *
+ * Upstream 2.1.145: a fork-context skill whose body suggested the model
+ * re-call the same skill (or any skill that transitively called it) would
+ * loop forever — every recursion spawned a fresh sub-agent with the same
+ * SkillTool available, and the model's natural response to a vague body
+ * like "Use the X skill" was to call SkillTool again. By the time the
+ * outer compaction-preservation `clearInvokedSkillsForAgent` ran in the
+ * finally block, the inner re-invocation had already consumed tens of
+ * thousands of tokens.
+ *
+ * Keyed by commandName, not agentId — the recursion can land on the SAME
+ * skill from any sub-agent depth, and the canonical name is what we want
+ * to break the cycle on. Bare Set (not Map): we don't need extra context;
+ * the .has() check is enough to refuse re-entry.
+ */
+const activeForkSkills = new Set<string>()
+
+/**
  * Executes a skill in a forked sub-agent context.
  * This runs the skill prompt in an isolated agent with its own token budget.
  */
@@ -130,6 +149,30 @@ async function executeForkedSkill(
   parentMessage: AssistantMessage,
   onProgress?: ToolCallProgress<Progress>,
 ): Promise<ToolResult<Output>> {
+  // Reject the re-entry case BEFORE any setup — the recursion check has
+  // to fire before createAgentId / runAgent so we don't burn the outer
+  // skill's token budget on the inner attempt. The forked sub-agent inherits
+  // the parent's SkillTool, so the model could otherwise just re-call us.
+  if (activeForkSkills.has(commandName)) {
+    logEvent('tengu_skill_fork_recursion_rejected', {
+      _PROTO_skill_name:
+        commandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
+    })
+    return {
+      data: {
+        success: false,
+        commandName,
+        status: 'forked',
+        agentId: createAgentId(),
+        result:
+          `Refused to re-invoke skill "${commandName}" — already on the ` +
+          `active fork-skill stack. A fork-context skill cannot call itself ` +
+          `(directly or transitively); finish the parent invocation first.`,
+      },
+    }
+  }
+  activeForkSkills.add(commandName)
+
   const startTime = Date.now()
   const agentId = createAgentId()
   const isBuiltIn = builtInCommandNames().has(commandName)
@@ -304,6 +347,9 @@ async function executeForkedSkill(
   } finally {
     // Release skill content from invokedSkills state
     clearInvokedSkillsForAgent(agentId)
+    // Pop from the fork-skill re-entry guard so a SUBSEQUENT top-level
+    // invocation (post-completion) of the same skill is permitted.
+    activeForkSkills.delete(commandName)
   }
 }
 
